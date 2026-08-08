@@ -4,6 +4,7 @@ import {
   createJobSchema,
   jobSchema,
   playerSchema,
+  uploadTextSchema,
   uploadSchema,
 } from "../src/shared/schemas";
 
@@ -49,6 +50,28 @@ describe("shared schemas", () => {
     expect(() =>
       uploadSchema.parse({
         title: "三体",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts text upload input and rejects blank text", () => {
+    expect(
+      uploadTextSchema.parse({
+        title: "三体",
+        text: "这是正文。",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toMatchObject({ title: "三体", text: "这是正文。" });
+
+    expect(() =>
+      uploadTextSchema.parse({
+        title: "三体",
+        text: "   ",
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",

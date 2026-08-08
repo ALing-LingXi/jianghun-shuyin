@@ -1,0 +1,3341 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+docs/
+  .archive/
+    development-plan.backup.md
+  development-plan.md
+  implementation-roadmap.md
+  module-dependencies.md
+src/
+  app/
+    api/
+      health/
+        route.ts
+    globals.css
+    layout.tsx
+    page.tsx
+  features/
+    health/
+      health-status.tsx
+  server/
+    domain/
+      entities.ts
+    infrastructure/
+      db/
+        client.ts
+        index.ts
+        initialize.ts
+        repositories.ts
+        schema.ts
+    ports/
+      repositories.ts
+  shared/
+    schemas/
+      book.ts
+      index.ts
+      job.ts
+      player.ts
+      upload.ts
+    types/
+      entities.ts
+    health.ts
+tests/
+  health.test.ts
+  repositories.test.ts
+  schemas.test.ts
+.gitignore
+.prettierignore
+.prettierrc.json
+AGENTS.md
+drizzle.config.ts
+eslint.config.mjs
+next-env.d.ts
+next.config.ts
+package.json
+pnpm-workspace.yaml
+postcss.config.mjs
+tsconfig.json
+vitest.config.cjs
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/server/domain/entities.ts">
+import type {
+  BookStatus,
+  ChunkStatus,
+  JobStage,
+  JobStatus,
+  PartStatus,
+} from "@/shared/types/entities";
+
+export type Book = {
+  id: string;
+  title: string;
+  author: string | null;
+  sourcePath: string;
+  status: BookStatus;
+  createdAt: Date;
+};
+
+export type Job = {
+  id: string;
+  bookId: string;
+  status: JobStatus;
+  stage: JobStage;
+  progress: number;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type Part = {
+  id: string;
+  bookId: string;
+  index: number;
+  title: string;
+  audioPath: string | null;
+  durationSeconds: number | null;
+  status: PartStatus;
+};
+
+export type Chunk = {
+  id: string;
+  partId: string;
+  index: number;
+  textHash: string;
+  audioPath: string | null;
+  status: ChunkStatus;
+  retryCount: number;
+  errorMessage: string | null;
+};
+</file>
+
+<file path="src/server/infrastructure/db/client.ts">
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as schema from "./schema";
+
+export function createDatabaseClient(filename: string) {
+  const sqlite = new Database(filename);
+  sqlite.pragma("foreign_keys = ON");
+
+  return {
+    sqlite,
+    db: drizzle(sqlite, { schema }),
+  };
+}
+
+export type DatabaseClient = ReturnType<typeof createDatabaseClient>;
+export type AppDatabase = DatabaseClient["db"];
+</file>
+
+<file path="src/server/infrastructure/db/index.ts">
+export * from "./client";
+export * from "./initialize";
+export * from "./repositories";
+</file>
+
+<file path="src/server/infrastructure/db/initialize.ts">
+import { sql } from "drizzle-orm";
+import type { AppDatabase } from "./client";
+
+export function initializeDatabase(db: AppDatabase): void {
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      author TEXT,
+      source_path TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY NOT NULL,
+      book_id TEXT NOT NULL REFERENCES books(id),
+      status TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      progress INTEGER NOT NULL,
+      error_message TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS parts (
+      id TEXT PRIMARY KEY NOT NULL,
+      book_id TEXT NOT NULL REFERENCES books(id),
+      part_index INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      audio_path TEXT,
+      duration_seconds INTEGER,
+      status TEXT NOT NULL
+    )
+  `);
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS chunks (
+      id TEXT PRIMARY KEY NOT NULL,
+      part_id TEXT NOT NULL REFERENCES parts(id),
+      chunk_index INTEGER NOT NULL,
+      text_hash TEXT NOT NULL,
+      audio_path TEXT,
+      status TEXT NOT NULL,
+      retry_count INTEGER NOT NULL,
+      error_message TEXT
+    )
+  `);
+}
+</file>
+
+<file path="src/server/infrastructure/db/repositories.ts">
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import type { Book, Job } from "@/server/domain/entities";
+import type {
+  BookRepository,
+  CreateBookInput,
+  CreateJobInput,
+  JobRepository,
+} from "@/server/ports/repositories";
+import type { BookStatus, JobStage, JobStatus } from "@/shared/types/entities";
+import type { AppDatabase } from "./client";
+import { books, jobs } from "./schema";
+
+type BookRow = typeof books.$inferSelect;
+type JobRow = typeof jobs.$inferSelect;
+
+export class DrizzleBookRepository implements BookRepository {
+  constructor(private readonly db: AppDatabase) {}
+
+  async create(input: CreateBookInput): Promise<Book> {
+    const book: Book = {
+      id: randomUUID(),
+      title: input.title,
+      author: input.author ?? null,
+      sourcePath: input.sourcePath,
+      status: input.status ?? "pending",
+      createdAt: new Date(),
+    };
+
+    this.db.insert(books).values(book).run();
+    return book;
+  }
+
+  async findById(id: string): Promise<Book | null> {
+    const row = this.db.select().from(books).where(eq(books.id, id)).get();
+    return row ? toBook(row) : null;
+  }
+}
+
+export class DrizzleJobRepository implements JobRepository {
+  constructor(private readonly db: AppDatabase) {}
+
+  async create(input: CreateJobInput): Promise<Job> {
+    const now = new Date();
+    const job: Job = {
+      id: randomUUID(),
+      bookId: input.bookId,
+      status: input.status ?? "queued",
+      stage: input.stage ?? "decoding",
+      progress: input.progress ?? 0,
+      errorMessage: input.errorMessage ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.db.insert(jobs).values(job).run();
+    return job;
+  }
+
+  async findById(id: string): Promise<Job | null> {
+    const row = this.db.select().from(jobs).where(eq(jobs.id, id)).get();
+    return row ? toJob(row) : null;
+  }
+}
+
+function toBook(row: BookRow): Book {
+  return {
+    ...row,
+    status: row.status as BookStatus,
+  };
+}
+
+function toJob(row: JobRow): Job {
+  return {
+    ...row,
+    status: row.status as JobStatus,
+    stage: row.stage as JobStage,
+  };
+}
+</file>
+
+<file path="src/server/infrastructure/db/schema.ts">
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const books = sqliteTable("books", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  author: text("author"),
+  sourcePath: text("source_path").notNull(),
+  status: text("status").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const jobs = sqliteTable("jobs", {
+  id: text("id").primaryKey(),
+  bookId: text("book_id")
+    .notNull()
+    .references(() => books.id),
+  status: text("status").notNull(),
+  stage: text("stage").notNull(),
+  progress: integer("progress").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const parts = sqliteTable("parts", {
+  id: text("id").primaryKey(),
+  bookId: text("book_id")
+    .notNull()
+    .references(() => books.id),
+  index: integer("part_index").notNull(),
+  title: text("title").notNull(),
+  audioPath: text("audio_path"),
+  durationSeconds: integer("duration_seconds"),
+  status: text("status").notNull(),
+});
+
+export const chunks = sqliteTable("chunks", {
+  id: text("id").primaryKey(),
+  partId: text("part_id")
+    .notNull()
+    .references(() => parts.id),
+  index: integer("chunk_index").notNull(),
+  textHash: text("text_hash").notNull(),
+  audioPath: text("audio_path"),
+  status: text("status").notNull(),
+  retryCount: integer("retry_count").notNull(),
+  errorMessage: text("error_message"),
+});
+</file>
+
+<file path="src/server/ports/repositories.ts">
+import type { Book, Job } from "@/server/domain/entities";
+import type { BookStatus, JobStage, JobStatus } from "@/shared/types/entities";
+
+export type CreateBookInput = {
+  title: string;
+  author?: string | null;
+  sourcePath: string;
+  status?: BookStatus;
+};
+
+export interface BookRepository {
+  create(input: CreateBookInput): Promise<Book>;
+  findById(id: string): Promise<Book | null>;
+}
+
+export type CreateJobInput = {
+  bookId: string;
+  status?: JobStatus;
+  stage?: JobStage;
+  progress?: number;
+  errorMessage?: string | null;
+};
+
+export interface JobRepository {
+  create(input: CreateJobInput): Promise<Job>;
+  findById(id: string): Promise<Job | null>;
+}
+</file>
+
+<file path="src/shared/schemas/book.ts">
+import { z } from "zod";
+import { BOOK_STATUSES } from "@/shared/types/entities";
+
+export const bookSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(1).max(200),
+  author: z.string().trim().min(1).max(120).nullable(),
+  sourcePath: z.string().trim().min(1),
+  status: z.enum(BOOK_STATUSES),
+  createdAt: z.iso.datetime(),
+});
+
+export const createBookSchema = bookSchema.omit({
+  id: true,
+  createdAt: true,
+}).partial({
+  author: true,
+  status: true,
+});
+
+export type BookDto = z.infer<typeof bookSchema>;
+export type CreateBookDto = z.infer<typeof createBookSchema>;
+</file>
+
+<file path="src/shared/schemas/index.ts">
+export * from "./book";
+export * from "./job";
+export * from "./player";
+export * from "./upload";
+</file>
+
+<file path="src/shared/schemas/job.ts">
+import { z } from "zod";
+import { JOB_STAGES, JOB_STATUSES } from "@/shared/types/entities";
+
+export const jobSchema = z.object({
+  id: z.string().uuid(),
+  bookId: z.string().uuid(),
+  status: z.enum(JOB_STATUSES),
+  stage: z.enum(JOB_STAGES),
+  progress: z.number().int().min(0).max(100),
+  errorMessage: z.string().trim().min(1).nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const createJobSchema = jobSchema
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .partial({
+    status: true,
+    stage: true,
+    progress: true,
+    errorMessage: true,
+  });
+
+export type JobDto = z.infer<typeof jobSchema>;
+export type CreateJobDto = z.infer<typeof createJobSchema>;
+</file>
+
+<file path="src/shared/schemas/player.ts">
+import { z } from "zod";
+
+export const playerPartSchema = z.object({
+  id: z.string().uuid(),
+  index: z.number().int().nonnegative(),
+  title: z.string().trim().min(1),
+  audioUrl: z.string().url(),
+  durationSeconds: z.number().nonnegative(),
+});
+
+export const playerSchema = z.object({
+  bookId: z.string().uuid(),
+  parts: z.array(playerPartSchema),
+});
+
+export type PlayerPartDto = z.infer<typeof playerPartSchema>;
+export type PlayerDto = z.infer<typeof playerSchema>;
+</file>
+
+<file path="src/shared/schemas/upload.ts">
+import { z } from "zod";
+
+export const uploadSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    author: z.string().trim().min(1).max(120).optional(),
+    text: z.string().trim().min(1).optional(),
+    fileName: z.string().trim().min(1).max(255).optional(),
+    voice: z.string().trim().min(1).max(100),
+    rate: z.string().trim().regex(/^[+-]\d+%$/),
+    pitch: z.string().trim().regex(/^[+-]\d+Hz$/),
+  })
+  .refine((value) => value.text !== undefined || value.fileName !== undefined, {
+    message: "text or fileName is required",
+    path: ["text"],
+  });
+
+export type UploadDto = z.infer<typeof uploadSchema>;
+</file>
+
+<file path="src/shared/types/entities.ts">
+export const JOB_STATUSES = [
+  "queued",
+  "processing",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+export const JOB_STAGES = [
+  "decoding",
+  "cleaning",
+  "chapter_detection",
+  "planning",
+  "tts",
+  "assembling",
+  "completed",
+] as const;
+
+export type JobStage = (typeof JOB_STAGES)[number];
+
+export const BOOK_STATUSES = [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+] as const;
+
+export type BookStatus = (typeof BOOK_STATUSES)[number];
+
+export const PART_STATUSES = ["pending", "processing", "completed", "failed"] as const;
+
+export type PartStatus = (typeof PART_STATUSES)[number];
+
+export const CHUNK_STATUSES = ["pending", "processing", "completed", "failed"] as const;
+
+export type ChunkStatus = (typeof CHUNK_STATUSES)[number];
+</file>
+
+<file path="tests/repositories.test.ts">
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  createDatabaseClient,
+  DrizzleBookRepository,
+  DrizzleJobRepository,
+  initializeDatabase,
+} from "../src/server/infrastructure/db";
+
+const clients: ReturnType<typeof createDatabaseClient>[] = [];
+
+function createTestDatabase() {
+  const client = createDatabaseClient(":memory:");
+  initializeDatabase(client.db);
+  clients.push(client);
+  return client;
+}
+
+afterEach(() => {
+  for (const client of clients.splice(0)) {
+    client.sqlite.close();
+  }
+});
+
+describe("Drizzle repositories", () => {
+  it("creates and finds a book", async () => {
+    const { db } = createTestDatabase();
+    const repository = new DrizzleBookRepository(db);
+
+    const created = await repository.create({
+      title: "三体",
+      author: "刘慈欣",
+      sourcePath: "storage/sources/three-body.txt",
+    });
+
+    await expect(repository.findById(created.id)).resolves.toEqual(created);
+    await expect(repository.findById("missing-book")).resolves.toBeNull();
+  });
+
+  it("creates and finds a job for an existing book", async () => {
+    const { db } = createTestDatabase();
+    const books = new DrizzleBookRepository(db);
+    const jobs = new DrizzleJobRepository(db);
+    const book = await books.create({
+      title: "三体",
+      sourcePath: "storage/sources/three-body.txt",
+    });
+
+    const created = await jobs.create({ bookId: book.id });
+
+    expect(created).toMatchObject({
+      bookId: book.id,
+      status: "queued",
+      stage: "decoding",
+      progress: 0,
+      errorMessage: null,
+    });
+    await expect(jobs.findById(created.id)).resolves.toEqual(created);
+    await expect(jobs.findById("missing-job")).resolves.toBeNull();
+  });
+});
+</file>
+
+<file path="tests/schemas.test.ts">
+import { describe, expect, it } from "vitest";
+import {
+  bookSchema,
+  createJobSchema,
+  jobSchema,
+  playerSchema,
+  uploadSchema,
+} from "../src/shared/schemas";
+
+const bookId = "a8b8a92c-7d3f-4a11-82b5-494c89a406bd";
+const jobId = "8bba0ac8-4804-4413-b7b4-e5f6b925e2d4";
+const createdAt = "2026-08-07T08:00:00.000Z";
+
+describe("shared schemas", () => {
+  it("accepts valid book and job DTOs", () => {
+    expect(
+      bookSchema.parse({
+        id: bookId,
+        title: "三体",
+        author: "刘慈欣",
+        sourcePath: "storage/sources/three-body.txt",
+        status: "pending",
+        createdAt,
+      }),
+    ).toMatchObject({ id: bookId, title: "三体" });
+
+    expect(
+      jobSchema.parse({
+        id: jobId,
+        bookId,
+        status: "queued",
+        stage: "decoding",
+        progress: 0,
+        errorMessage: null,
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    ).toMatchObject({ id: jobId, status: "queued" });
+  });
+
+  it("rejects invalid job progress and missing upload content", () => {
+    expect(() =>
+      createJobSchema.parse({
+        bookId,
+        progress: 101,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      uploadSchema.parse({
+        title: "三体",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts a player with playable parts", () => {
+    expect(
+      playerSchema.parse({
+        bookId,
+        parts: [
+          {
+            id: "c53a96af-2a92-4fc0-8989-9d1fa1f9f3bd",
+            index: 0,
+            title: "第一章",
+            audioUrl: "http://localhost:3000/audio/part-1.mp3",
+            durationSeconds: 62,
+          },
+        ],
+      }),
+    ).toMatchObject({ bookId });
+  });
+});
+</file>
+
+<file path="drizzle.config.ts">
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "sqlite",
+  schema: "./src/server/infrastructure/db/schema.ts",
+  out: "./src/server/infrastructure/db/migrations",
+  dbCredentials: {
+    url: "./storage/jianghun-shuyin.db",
+  },
+});
+</file>
+
+<file path="vitest.config.cjs">
+/* eslint-disable @typescript-eslint/no-require-imports */
+const path = require("node:path");
+const { defineConfig } = require("vitest/config");
+
+module.exports = defineConfig({
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
+  test: {
+    environment: "node",
+    include: ["tests/**/*.test.ts"],
+  },
+});
+</file>
+
+<file path="docs/.archive/development-plan.backup.md">
+# 匠魂书音开发计划书
+
+## 1. 项目定位
+
+匠魂书音是一个面向个人使用的本地听书生成工具，核心目标是把中文 TXT 小说转换成可播放、可管理、可恢复的分段音频。
+
+第一阶段不追求完整平台化，不做登录、多用户、云端同步和复杂部署。项目先围绕一条稳定闭环展开：
+
+```text
+上传 TXT 或粘贴文本
+-> 自动识别编码
+-> 文本清洗
+-> 章节识别
+-> 听书分段规划
+-> TTS 分块合成
+-> FFmpeg 拼接音频
+-> 前端任务进度展示
+-> 前端播放器播放
+```
+
+面试包装方向：这是一个以前端岗位为主线的 TypeScript 全栈项目。项目重点展示复杂业务 UI、长任务状态管理、播放器体验、移动端适配、API 契约建模、前后端类型一致性和工程化测试能力。后端与 worker 作为真实业务复杂度的支撑层，不抢前端主线。
+
+## 2. 技术选型总览
+
+### 2.1 推荐技术栈
+
+```text
+应用框架：Next.js + App Router
+语言：TypeScript
+UI：React
+样式：Tailwind CSS + CSS variables
+服务端 API：Next.js Route Handlers
+长任务执行：独立 Node.js Worker + p-queue
+数据库：SQLite
+ORM / Query Builder：Drizzle ORM
+运行时校验：Zod
+客户端请求：TanStack Query
+客户端状态：Zustand
+文件与命令执行：Node fs/promises + execa
+TTS：edge-tts CLI / 可替换 TTSProvider
+音频处理：FFmpeg
+单元测试：Vitest
+组件测试：React Testing Library
+接口 Mock：MSW
+端到端测试：Playwright
+代码质量：ESLint + Prettier
+```
+
+### 2.2 为什么用 Next.js + TypeScript
+
+这个项目面向大厂前端岗位，技术栈应优先服务前端能力表达。Next.js + TypeScript 比“React 前端 + Python 后端”更适合作品集叙事：
+
+- 前后端都在 TypeScript 体系内，能展示类型建模能力。
+- Zod schema 可以同时承担运行时校验和类型推导。
+- Route Handlers 适合做 BFF/API 层，和前端页面关系清楚。
+- TanStack Query 可以消费强类型 API，展示缓存、轮询、错误恢复和请求状态设计。
+- Zustand 只管理跨页面播放器状态，职责边界清晰。
+- Next.js App Router 可以展示 Server Components、Client Components 和数据边界设计。
+- 独立 worker 承担长任务，避免把 TTS/FFmpeg 这类慢任务塞进请求生命周期。
+
+### 2.3 为什么不用 Python 后端
+
+Python 做文本处理和音频 pipeline 很方便，但它会让面试叙事分叉。当前项目的目标不是证明后端算法脚本能力，而是证明前端工程能力和 TypeScript 全栈协作能力。
+
+如果继续使用 Python，面试官容易追问：
+
+```text
+为什么前端岗项目不用 Node.js / TypeScript？
+前后端类型契约如何保证？
+Python 后端能力和前端岗位有什么直接关系？
+```
+
+因此第一版改为 TypeScript 全栈。文本清洗、章节识别、TTS 编排和 FFmpeg 调用都可以在 Node.js 中完成。真正的关键不是语言能不能做，而是技术栈是否服务面试主线。
+
+### 2.4 Next.js 的边界
+
+Next.js 负责页面、BFF 和轻量 API，不直接承担长时间音频生成任务。
+
+推荐边界：
+
+```text
+Next.js Route Handler
+-> 接收上传 / 创建任务 / 查询任务 / 触发重试
+
+Node Worker
+-> 解码 / 清洗 / 分章 / 分段 / TTS / FFmpeg / 状态落库
+
+Frontend
+-> 上传体验 / 任务进度 / 失败恢复 / 播放器 / 移动端布局
+```
+
+这样既能利用 Next.js 的前端工程优势，又不会把长任务放在不稳定的 HTTP 请求生命周期里。
+
+## 3. 架构原则
+
+第一版采用“Next.js BFF + 独立 Worker + 轻量端口适配器”，不做完整企业级 Clean Architecture。
+
+目标是在个人开发和 Codex 协作可实现的前提下，降低核心业务与外部依赖之间的耦合，同时让前端主线足够突出。
+
+核心原则：
+
+```text
+app/ 负责页面路由、布局和前端交互入口
+features/ 按业务功能组织前端组件、hooks、store
+server/api 负责 Route Handler 和 DTO
+server/application 负责编排业务用例
+server/domain 保存核心实体、状态和错误
+server/ports 定义可替换外部依赖
+server/infrastructure 实现具体技术方案
+server/pipeline 保持纯函数/纯模块，便于测试
+worker 负责长任务执行，不依赖 React 页面
+shared 保存前后端共享 schema、类型和常量
+```
+
+推荐依赖方向：
+
+```text
+app -> features -> shared
+features -> server/client-api-types 或 shared
+server/api -> server/application -> server/ports -> server/domain
+server/infrastructure -> server/ports
+server/pipeline -> server/domain 或 shared
+worker -> server/application
+```
+
+第一版必须抽象的外部依赖：
+
+```text
+TTSProvider          # edge-tts 未来可能替换成 Azure/OpenAI/本地 TTS
+FileStorage          # 本地文件未来可能替换成对象存储
+JobRepository        # SQLite 未来可能替换成 PostgreSQL
+AudioAssembler       # FFmpeg 调用需要隔离
+ProgressPublisher    # 轮询未来可能替换成 SSE/WebSocket
+JobRunner            # 本地 worker 未来可能替换成队列系统
+```
+
+第一版不抽象的核心算法：
+
+```text
+decodeText
+cleanText
+detectChapters
+splitChapter
+planParts
+buildChunks
+estimateDuration
+```
+
+这些模块是项目的核心能力，优先保持简单、可测试、可读。后续只有在出现多个实现或明显变化点时再抽象。
+
+## 4. 项目文件架构
+
+```text
+jianghun-audio-book/
+├─ README.md
+├─ package.json
+├─ pnpm-workspace.yaml
+├─ next.config.ts
+├─ tsconfig.json
+├─ eslint.config.mjs
+├─ prettier.config.mjs
+├─ .env.example
+├─ drizzle.config.ts
+│
+├─ docs/
+│  ├─ development-plan.md
+│  ├─ architecture.md
+│  ├─ api-contract.md
+│  ├─ pipeline.md
+│  └─ interview-notes.md
+│
+├─ src/
+│  ├─ app/
+│  │  ├─ layout.tsx
+│  │  ├─ page.tsx                         # 上传页或书架页入口
+│  │  ├─ globals.css
+│  │  ├─ upload/
+│  │  │  └─ page.tsx
+│  │  ├─ jobs/
+│  │  │  └─ [jobId]/
+│  │  │     └─ page.tsx
+│  │  ├─ books/
+│  │  │  ├─ page.tsx
+│  │  │  └─ [bookId]/
+│  │  │     └─ player/
+│  │  │        └─ page.tsx
+│  │  └─ api/
+│  │     ├─ health/
+│  │     │  └─ route.ts
+│  │     ├─ uploads/
+│  │     │  ├─ file/
+│  │     │  │  └─ route.ts
+│  │     │  └─ text/
+│  │     │     └─ route.ts
+│  │     ├─ jobs/
+│  │     │  ├─ [jobId]/
+│  │     │  │  └─ route.ts
+│  │     │  └─ [jobId]/
+│  │     │     └─ retry/
+│  │     │        └─ route.ts
+│  │     ├─ chunks/
+│  │     │  └─ [chunkId]/
+│  │     │     └─ retry/
+│  │     │        └─ route.ts
+│  │     ├─ books/
+│  │     │  ├─ route.ts
+│  │     │  └─ [bookId]/
+│  │     │     └─ route.ts
+│  │     └─ player/
+│  │        └─ books/
+│  │           └─ [bookId]/
+│  │              └─ route.ts
+│  │
+│  ├─ features/
+│  │  ├─ upload/
+│  │  │  ├─ components/
+│  │  │  │  ├─ FileDropzone.tsx
+│  │  │  │  ├─ PasteTextBox.tsx
+│  │  │  │  └─ TtsSettings.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useUpload.ts
+│  │  │  └─ api.ts
+│  │  ├─ job/
+│  │  │  ├─ components/
+│  │  │  │  ├─ PipelineSteps.tsx
+│  │  │  │  ├─ JobProgress.tsx
+│  │  │  │  ├─ ChunkStatusList.tsx
+│  │  │  │  └─ RetryPanel.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useJobPolling.ts
+│  │  │  └─ api.ts
+│  │  ├─ player/
+│  │  │  ├─ components/
+│  │  │  │  ├─ AudioPlayer.tsx
+│  │  │  │  ├─ PlaybackControls.tsx
+│  │  │  │  ├─ PartList.tsx
+│  │  │  │  └─ MiniPlayer.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ usePlayer.ts
+│  │  │  ├─ stores/
+│  │  │  │  └─ playerStore.ts
+│  │  │  └─ api.ts
+│  │  ├─ library/
+│  │  │  ├─ components/
+│  │  │  │  ├─ BookCard.tsx
+│  │  │  │  └─ BookMetaPanel.tsx
+│  │  │  ├─ hooks/
+│  │  │  │  └─ useBooks.ts
+│  │  │  └─ api.ts
+│  │  └─ ui/
+│  │     ├─ Button.tsx
+│  │     ├─ Dialog.tsx
+│  │     ├─ Progress.tsx
+│  │     └─ Toast.tsx
+│  │
+│  ├─ server/
+│  │  ├─ application/
+│  │  │  ├─ createBookJob.ts
+│  │  │  ├─ runPipelineJob.ts
+│  │  │  ├─ retryChunk.ts
+│  │  │  ├─ queryJob.ts
+│  │  │  └─ queryPlayer.ts
+│  │  ├─ domain/
+│  │  │  ├─ entities.ts
+│  │  │  ├─ states.ts
+│  │  │  └─ errors.ts
+│  │  ├─ ports/
+│  │  │  ├─ repositories.ts
+│  │  │  ├─ storage.ts
+│  │  │  ├─ tts.ts
+│  │  │  ├─ audio.ts
+│  │  │  ├─ progress.ts
+│  │  │  └─ jobRunner.ts
+│  │  ├─ infrastructure/
+│  │  │  ├─ db/
+│  │  │  │  ├─ client.ts
+│  │  │  │  ├─ schema.ts
+│  │  │  │  ├─ migrations/
+│  │  │  │  └─ repositories.ts
+│  │  │  ├─ localStorage.ts
+│  │  │  ├─ edgeTtsProvider.ts
+│  │  │  ├─ ffmpegAudio.ts
+│  │  │  ├─ pollingProgress.ts
+│  │  │  └─ localJobRunner.ts
+│  │  ├─ pipeline/
+│  │  │  ├─ decodeText.ts
+│  │  │  ├─ cleanText.ts
+│  │  │  ├─ detectChapters.ts
+│  │  │  ├─ splitChapter.ts
+│  │  │  ├─ planParts.ts
+│  │  │  ├─ estimateDuration.ts
+│  │  │  └─ buildReport.ts
+│  │  ├─ tts/
+│  │  │  ├─ voiceCatalog.ts
+│  │  │  ├─ buildChunks.ts
+│  │  │  ├─ chunkCache.ts
+│  │  │  └─ retryPolicy.ts
+│  │  ├─ composition/
+│  │  │  └─ container.ts
+│  │  └─ utils/
+│  │     ├─ hashing.ts
+│  │     └─ time.ts
+│  │
+│  ├─ shared/
+│  │  ├─ schemas/
+│  │  │  ├─ book.schema.ts
+│  │  │  ├─ job.schema.ts
+│  │  │  ├─ player.schema.ts
+│  │  │  └─ upload.schema.ts
+│  │  ├─ types/
+│  │  │  ├─ book.ts
+│  │  │  ├─ job.ts
+│  │  │  ├─ player.ts
+│  │  │  └─ tts.ts
+│  │  └─ constants.ts
+│  │
+│  └─ worker/
+│     ├─ index.ts
+│     ├─ queue.ts
+│     └─ handlers/
+│        ├─ runPipelineJob.handler.ts
+│        └─ retryChunk.handler.ts
+│
+├─ tests/
+│  ├─ pipeline/
+│  │  ├─ decodeText.test.ts
+│  │  ├─ cleanText.test.ts
+│  │  ├─ detectChapters.test.ts
+│  │  ├─ planParts.test.ts
+│  │  └─ buildChunks.test.ts
+│  ├─ application/
+│  │  ├─ createBookJob.test.ts
+│  │  └─ runPipelineJob.test.ts
+│  ├─ components/
+│  │  ├─ JobProgress.test.tsx
+│  │  └─ AudioPlayer.test.tsx
+│  ├─ e2e/
+│  │  ├─ upload-to-job.spec.ts
+│  │  └─ player.spec.ts
+│  └─ mocks/
+│     ├─ server.ts
+│     └─ handlers.ts
+│
+├─ storage/
+│  ├─ sources/
+│  ├─ cleaned/
+│  ├─ reports/
+│  ├─ chunks/
+│  └─ parts/
+│
+└─ scripts/
+   ├─ dev.ps1
+   ├─ worker.ps1
+   ├─ init-db.ps1
+   ├─ check-ffmpeg.ps1
+   └─ seed-sample.ps1
+```
+
+## 5. 后端与 Worker 模块拆分
+
+### 5.1 domain：核心数据和状态
+
+目标：定义业务语言，不依赖 Next.js、React、Drizzle、edge-tts、FFmpeg。
+
+文件：
+
+```text
+src/server/domain/entities.ts
+src/server/domain/states.ts
+src/server/domain/errors.ts
+```
+
+小任务：
+
+- 定义 Book、Job、Part、Chunk 数据结构。
+- 定义 JobStatus、JobStage、PartStatus、ChunkStatus。
+- 定义业务错误类型。
+- 所有实体只保存业务字段，不携带数据库 ORM 行为。
+
+验收标准：
+
+- domain 文件不导入 Next.js、React、Drizzle、edge-tts、execa。
+- 业务状态命名统一，前端和后端可以稳定映射。
+
+### 5.2 shared：类型契约和校验
+
+目标：把前后端共同依赖的 DTO、schema 和常量集中管理。
+
+文件：
+
+```text
+src/shared/schemas/*.schema.ts
+src/shared/types/*.ts
+src/shared/constants.ts
+```
+
+小任务：
+
+- 用 Zod 定义上传、任务、书籍、播放器 DTO。
+- 从 Zod schema 推导 TypeScript 类型。
+- 前端 api、Route Handlers、测试 mock 都复用同一套契约。
+
+验收标准：
+
+- API 响应结构变化时，前端类型能同步暴露错误。
+- Route Handlers 必须对入参做 Zod 校验。
+- MSW mock 使用 shared schema 对齐数据形状。
+
+### 5.3 ports：外部依赖抽象
+
+目标：把未来可能替换的技术实现隔离出去。
+
+文件：
+
+```text
+src/server/ports/repositories.ts
+src/server/ports/storage.ts
+src/server/ports/tts.ts
+src/server/ports/audio.ts
+src/server/ports/progress.ts
+src/server/ports/jobRunner.ts
+```
+
+接口：
+
+```text
+BookRepository
+JobRepository
+PartRepository
+ChunkRepository
+FileStorage
+TTSProvider
+AudioAssembler
+ProgressPublisher
+JobRunner
+```
+
+验收标准：
+
+- application 只依赖 ports，不依赖 infrastructure。
+- 替换 SQLite、edge-tts、FFmpeg、本地 worker 时，不需要修改 pipeline 算法。
+
+### 5.4 infrastructure：具体实现
+
+目标：实现第一版实际运行需要的外部能力。
+
+文件：
+
+```text
+src/server/infrastructure/db/client.ts
+src/server/infrastructure/db/schema.ts
+src/server/infrastructure/db/repositories.ts
+src/server/infrastructure/localStorage.ts
+src/server/infrastructure/edgeTtsProvider.ts
+src/server/infrastructure/ffmpegAudio.ts
+src/server/infrastructure/pollingProgress.ts
+src/server/infrastructure/localJobRunner.ts
+```
+
+小任务：
+
+- Drizzle + SQLite 实现 repository 端口。
+- localStorage 实现 FileStorage。
+- edgeTtsProvider 实现 TTSProvider。
+- ffmpegAudio 通过 execa 调用 FFmpeg，实现 AudioAssembler。
+- pollingProgress 将进度写入数据库，供前端轮询。
+- localJobRunner 将 jobId 投递给本地 worker。
+
+验收标准：
+
+- infrastructure 可以导入第三方库和系统工具。
+- application 不直接 import infrastructure 的具体类，统一在 composition/container.ts 组装。
+- 后续替换 PostgreSQL、对象存储、SSE、队列系统时主要改 infrastructure。
+
+### 5.5 pipeline：文本处理核心
+
+目标：保持纯业务模块，便于测试和复用。
+
+文件：
+
+```text
+src/server/pipeline/decodeText.ts
+src/server/pipeline/cleanText.ts
+src/server/pipeline/detectChapters.ts
+src/server/pipeline/splitChapter.ts
+src/server/pipeline/planParts.ts
+src/server/pipeline/estimateDuration.ts
+src/server/pipeline/buildReport.ts
+```
+
+小任务：
+
+- decodeText 支持 UTF-8、UTF-8 BOM、GBK、Big5。
+- cleanText 合并空行、去广告行、生成清洗报告。
+- detectChapters 识别常见中文章节标题。
+- splitChapter 处理超长章节。
+- planParts 规划 20 到 40 分钟 part。
+- buildReport 输出清洗、分章、分段结果。
+
+验收标准：
+
+- pipeline 不写数据库。
+- pipeline 不直接读写项目 storage。
+- pipeline 输入文本，输出结构化结果。
+- 单元测试覆盖核心边界。
+
+### 5.6 tts：chunk 构建与缓存
+
+目标：长文本稳定合成，失败时只重试小块。
+
+文件：
+
+```text
+src/server/tts/voiceCatalog.ts
+src/server/tts/buildChunks.ts
+src/server/tts/chunkCache.ts
+src/server/tts/retryPolicy.ts
+src/server/utils/hashing.ts
+```
+
+小任务：
+
+- 提供中文默认音色。
+- 将 part 文本切成 800 到 1500 字左右的 chunk。
+- 优先按段落和句号切分。
+- 缓存 key 包含 voice、rate、pitch、textHash。
+- 命中缓存时复用已有音频。
+- 失败时支持指数退避。
+
+验收标准：
+
+- 相同文本和参数不会重复合成。
+- 修改 voice 或 rate 后不会误用旧缓存。
+- buildChunks 不依赖 edge-tts 具体实现。
+
+### 5.7 application：用例编排
+
+目标：串起业务流程，但不绑定具体外部实现。
+
+文件：
+
+```text
+src/server/application/createBookJob.ts
+src/server/application/runPipelineJob.ts
+src/server/application/retryChunk.ts
+src/server/application/queryJob.ts
+src/server/application/queryPlayer.ts
+```
+
+用例：
+
+```text
+CreateBookJob
+RunPipelineJob
+RetryChunk
+QueryJob
+QueryPlayer
+```
+
+验收标准：
+
+- application 可以用 fake repository、fake TTS、fake storage 做测试。
+- runPipelineJob 不直接调用 Drizzle。
+- runPipelineJob 不直接使用 edge-tts。
+- runPipelineJob 不直接拼接文件系统路径。
+
+### 5.8 app/api：Route Handlers
+
+目标：对前端暴露稳定 API，不承载业务细节。
+
+接口：
+
+```text
+GET /api/health
+POST /api/uploads/file
+POST /api/uploads/text
+GET /api/jobs/{jobId}
+POST /api/jobs/{jobId}/retry
+POST /api/chunks/{chunkId}/retry
+GET /api/books
+GET /api/books/{bookId}
+GET /api/player/books/{bookId}
+```
+
+验收标准：
+
+- Route Handler 只做参数校验、调用 use case、返回 DTO。
+- Route Handler 不直接调用 cleanText、edge-tts、FFmpeg。
+- API 响应结构和 shared schema 对齐。
+
+## 6. 前端开发计划
+
+### 6.1 前端架构原则
+
+前端按功能域组织，不让页面组件承担复杂业务逻辑。
+
+```text
+app 页面负责路由、布局和服务端入口
+features/*/components 负责业务组件
+features/*/hooks 负责请求、轮询和交互状态
+features/*/api 负责 HTTP 调用
+features/player/stores 负责跨页面播放器状态
+shared/schemas 负责数据契约
+```
+
+页面组件不要直接写复杂请求、轮询、播放器状态和错误恢复逻辑。
+
+### 6.2 上传页
+
+文件：
+
+```text
+src/app/upload/page.tsx
+src/features/upload/components/FileDropzone.tsx
+src/features/upload/components/PasteTextBox.tsx
+src/features/upload/components/TtsSettings.tsx
+src/features/upload/hooks/useUpload.ts
+```
+
+展示：
+
+```text
+TXT 文件拖拽上传
+粘贴文本输入框
+书名
+作者
+音色选择
+语速选择
+目标分段时长
+开始生成按钮
+```
+
+验收标准：
+
+- 能上传文件。
+- 能粘贴文本。
+- 提交后跳转任务页。
+- loading、error、disabled 状态完整。
+
+### 6.3 任务进度页
+
+文件：
+
+```text
+src/app/jobs/[jobId]/page.tsx
+src/features/job/components/PipelineSteps.tsx
+src/features/job/components/JobProgress.tsx
+src/features/job/components/ChunkStatusList.tsx
+src/features/job/components/RetryPanel.tsx
+src/features/job/hooks/useJobPolling.ts
+```
+
+展示：
+
+```text
+当前阶段
+总进度
+阶段进度
+part 完成数
+chunk 完成数
+失败 chunk 数
+流水线步骤
+失败详情
+重试按钮
+完成后进入播放器按钮
+```
+
+验收标准：
+
+- 任务状态每 1 到 3 秒刷新。
+- 任务失败原因清楚。
+- 失败 chunk 可见。
+- 完成后可以跳转播放页。
+- 轮询停止条件明确，不在完成后继续请求。
+
+### 6.4 播放页
+
+文件：
+
+```text
+src/app/books/[bookId]/player/page.tsx
+src/features/player/components/AudioPlayer.tsx
+src/features/player/components/MiniPlayer.tsx
+src/features/player/components/PartList.tsx
+src/features/player/components/PlaybackControls.tsx
+src/features/player/stores/playerStore.ts
+src/features/player/hooks/usePlayer.ts
+```
+
+展示：
+
+```text
+当前播放 part
+音频播放器
+上一段
+下一段
+播放列表
+每段标题范围
+每段时长
+下载音频
+移动端底部 MiniPlayer
+```
+
+验收标准：
+
+- 可以播放生成的 mp3。
+- 可以切换 part。
+- 刷新页面后能重新加载播放列表。
+- 手机宽度下播放器可用。
+- 播放器状态不散落在多个页面组件里。
+
+### 6.5 本地书架页
+
+文件：
+
+```text
+src/app/books/page.tsx
+src/features/library/components/BookCard.tsx
+src/features/library/components/BookMetaPanel.tsx
+src/features/library/hooks/useBooks.ts
+```
+
+展示：
+
+```text
+书名
+作者
+生成状态
+part 数量
+总时长
+创建时间
+继续播放
+查看任务
+```
+
+验收标准：
+
+- 能看到历史书籍。
+- 可以进入播放页。
+- 可以进入任务页。
+- 空状态和错误状态可用。
+
+## 7. MVP 实现顺序
+
+### Milestone 1：Next.js 工程骨架
+
+- 创建 Next.js + TypeScript 项目。
+- 配置 Tailwind、ESLint、Prettier。
+- 创建 app、features、server、shared、worker 基础目录。
+- 实现 `GET /api/health`。
+- 前端展示服务健康状态。
+
+完成标志：
+
+- Next.js 能启动。
+- 前端能调用 `/api/health`。
+
+### Milestone 2：类型契约和数据库
+
+- 定义 shared Zod schemas。
+- 定义 domain entities/states。
+- 定义 Drizzle schema。
+- 初始化 SQLite。
+- 实现基础 repository。
+
+完成标志：
+
+- API DTO 和前端类型来自同一套 schema。
+- 数据库能创建 Book 和 Job。
+
+### Milestone 3：上传闭环
+
+- 实现 CreateBookJob。
+- 实现上传文件和粘贴文本 Route Handler。
+- 前端 UploadPage 调用接口。
+- 上传后跳转 JobPage。
+
+完成标志：
+
+- storage/sources 里出现文件。
+- 数据库里出现 Book 和 Job。
+
+### Milestone 4：文本解析闭环
+
+- 实现 decodeText。
+- 实现 cleanText。
+- 实现 detectChapters。
+- 实现 splitChapter / planParts。
+- 生成 reports。
+
+完成标志：
+
+- 一个 TXT 能生成章节列表和 part 计划。
+- pipeline 单元测试通过。
+
+### Milestone 5：Worker 和短音频
+
+- 实现本地 worker 启动脚本。
+- 实现 JobRunner。
+- 实现 TTSProvider 和 edgeTtsProvider。
+- 实现 buildChunks 和 chunkCache。
+- 生成一个短 mp3。
+
+完成标志：
+
+- 浏览器能播放一段生成音频。
+- application 只依赖 TTSProvider 抽象。
+
+### Milestone 6：音频拼接
+
+- 实现 AudioAssembler port。
+- 实现 ffmpegAudio。
+- 生成 concat list。
+- 拼接 part mp3。
+- probe 音频时长。
+
+完成标志：
+
+- 多个 chunk 能拼成 part。
+- part 能被浏览器播放。
+
+### Milestone 7：完整任务流水线
+
+- 实现 RunPipelineJob。
+- 实现 ProgressPublisher。
+- 每个阶段更新 job.stage 和 progress。
+- chunk/part 状态落库。
+- JobPage 轮询展示进度。
+
+完成标志：
+
+- 一本小 TXT 能完整生成多个 part。
+- JobPage 展示真实进度。
+- PlayerPage 可以播放所有 part。
+
+### Milestone 8：失败恢复
+
+- 实现 RetryChunk。
+- 记录 chunk 错误。
+- 前端展示失败 chunk。
+- RetryPanel 调用重试接口。
+
+完成标志：
+
+- 人为制造 TTS 失败后，前端能看到失败原因。
+- 点击重试后可以恢复。
+
+### Milestone 9：前端展示打磨
+
+- 打磨 JobPage 为流程工作台。
+- 打磨 PlayerPage 的桌面和移动端布局。
+- 增加 MiniPlayer。
+- 增加 LibraryPage。
+- 增加空状态、错误状态、加载状态。
+- 增加组件测试和 1 到 2 条 Playwright E2E。
+
+完成标志：
+
+- 项目可以录屏展示。
+- 手机视口下上传、任务、播放三个页面可用。
+- 核心组件有测试，关键闭环有 E2E。
+
+## 8. 解耦验收清单
+
+每完成一个里程碑，都检查以下规则：
+
+```text
+Route Handler 不能 import pipeline 内部模块
+Route Handler 不能 import infrastructure/db/schema.ts
+application 不能 import Next.js
+application 不能 import React
+application 不能 import edge-tts
+application 不能 import execa
+application 不能手写 storage 目录路径
+pipeline 不能写数据库
+pipeline 不能读写项目 storage
+domain 不能依赖任何第三方框架
+frontend page 不能直接写复杂轮询逻辑
+frontend page 不能直接管理全局播放器状态
+worker 不能依赖 React 组件或 app 页面
+```
+
+允许的例外：
+
+- `server/composition/container.ts` 可以组装具体 infrastructure 实现。
+- infrastructure 可以依赖第三方库和系统工具。
+- tests 可以使用 fake 实现验证 application。
+
+## 9. 面试亮点设计
+
+### 9.1 前端亮点
+
+- Next.js App Router 下的页面组织和业务 feature 拆分。
+- 长任务进度可视化。
+- PipelineSteps 展示复杂任务阶段。
+- ChunkStatusList 展示细粒度状态。
+- RetryPanel 展示失败恢复能力。
+- AudioPlayer + MiniPlayer 展示复杂播放器状态。
+- TanStack Query 管理轮询、缓存、错误和停止条件。
+- Zustand 管理跨页面播放器状态。
+- 响应式布局支持桌面端和手机端。
+- React Testing Library + Playwright 覆盖核心用户路径。
+
+### 9.2 TypeScript 工程亮点
+
+- 前后端共享 Zod schema 和 TypeScript 类型。
+- Route Handlers 入参出参都有 schema 约束。
+- API 数据、组件 props、任务状态和播放器状态都有明确类型建模。
+- 使用 Drizzle 建模数据库，避免手写散乱 SQL。
+- MSW mock 和真实 API 复用同一套 DTO 结构。
+
+### 9.3 后端/Worker 工程亮点
+
+- Next.js 只做 BFF/API，不把长任务塞进请求生命周期。
+- 独立 worker 处理 TTS 和 FFmpeg 长任务。
+- 轻量端口适配器隔离高变化外部依赖。
+- TTSProvider 抽象，edge-tts 可替换。
+- FileStorage 抽象，本地存储可替换对象存储。
+- JobRepository 抽象，SQLite 可替换 PostgreSQL。
+- ProgressPublisher 抽象，轮询可替换 SSE/WebSocket。
+- chunk 级缓存，避免重复合成。
+- chunk 级失败重试，不重跑整本书。
+- part 规划按听书时长规划，不是粗暴按章节切割。
+
+### 9.4 推荐面试说法
+
+```text
+这个项目我没有把重点放在登录、多用户或者后台管理上，而是先聚焦长文本转音频的核心闭环。
+技术栈选择 Next.js + TypeScript，是为了让前端页面、BFF、DTO、测试 mock 和 worker 编排都在同一套类型体系里。
+Next.js Route Handlers 只负责上传、查询、重试等 API 入口，真正耗时的 TTS 和 FFmpeg 任务放到独立 Node worker 中执行。
+前端重点解决长任务状态可视化、失败恢复、播放器体验和移动端适配。
+工程上用 Zod 维护 API 契约，用 TanStack Query 管理轮询和缓存，用 Zustand 管理跨页面播放器状态。
+第一版用 SQLite、本地文件和本地 worker 控制复杂度，但通过端口适配器保留替换 PostgreSQL、对象存储、队列系统和 SSE 的空间。
+```
+
+## 10. 风险清单
+
+### 10.1 Next.js 承担长任务的风险
+
+风险：
+
+- Route Handler 不适合执行长时间 TTS/FFmpeg 任务。
+- 部署环境可能存在请求超时、文件系统限制或进程生命周期限制。
+- 本地 demo 能跑，不代表生产环境可靠。
+
+应对：
+
+- Route Handler 只创建 job 和查询状态。
+- 长任务放到独立 worker。
+- 第一版使用本地 worker，后续可替换成队列系统。
+
+### 10.2 edge-tts 稳定性风险
+
+风险：
+
+- edge-tts 不是正式收费云 API。
+- 接口可能变化。
+- 可能遇到限流或网络失败。
+
+应对：
+
+- 用 TTSProvider 抽象隔离。
+- 做 chunk 重试。
+- 做 chunk 缓存。
+- 保留替换 Azure TTS、OpenAI TTS、本地 TTS 的接口。
+
+### 10.3 抽象过度风险
+
+风险：
+
+- 文件数量过多。
+- 真实逻辑很少，接口很多。
+- 实现时容易漏依赖。
+
+应对：
+
+- 只抽象外部依赖。
+- 不抽象 decodeText、cleanText、planParts 等核心算法。
+- 每个里程碑都保持可运行。
+- 每次只实现一个 use case 或一个 port。
+
+### 10.4 长文本处理风险
+
+风险：
+
+- TXT 编码混乱。
+- 小说广告和异常格式很多。
+- 章节识别不可能覆盖全部格式。
+
+应对：
+
+- 支持常见编码。
+- 清洗报告可视化。
+- 无法识别章节时 fallback 成单章。
+- 单元测试覆盖常见格式。
+
+### 10.5 音频拼接风险
+
+风险：
+
+- FFmpeg 未安装。
+- chunk 损坏。
+- 拼接后浏览器无法播放。
+
+应对：
+
+- 启动时检查 FFmpeg。
+- 拼接前检查 chunk 是否存在。
+- 拼接后 probe 音频时长。
+- 前端展示错误原因。
+
+### 10.6 项目范围风险
+
+风险：
+
+- 过早做登录、收藏、云同步、复杂播放器。
+- 后端基础设施占用太多时间。
+
+应对：
+
+- 第一版只做本地单用户。
+- 先用轮询，不上 SSE。
+- 先用 SQLite，不上 PostgreSQL。
+- 先用本地 worker，不上 Redis / BullMQ。
+
+## 11. 第一版不做清单
+
+- 登录注册。
+- 多用户。
+- 云端部署。
+- 收藏系统。
+- 睡眠定时。
+- 波形图。
+- 字幕同步。
+- 章节内文本高亮跟读。
+- 复杂管理后台。
+- 付费 TTS 接入。
+- Redis 队列。
+- 对象存储。
+
+这些功能可以作为二期或面试时的扩展方案，不进入第一版。
+
+## 12. 二期优化方向
+
+### 12.1 前端体验优化
+
+- PWA 安装到手机桌面。
+- 移动端底部 MiniPlayer。
+- 播放进度本地保存。
+- 深色模式。
+- 任务完成浏览器通知。
+- 更细腻的空状态和错误状态。
+
+### 12.2 前端工程优化
+
+- 任务进度从轮询替换为 SSE。
+- 使用状态机管理 JobPage 状态。
+- 增加更多组件测试。
+- 增加更多 Playwright 端到端测试。
+- 增加前端性能优化和列表虚拟化。
+
+### 12.3 服务端工程优化
+
+- SQLite repository 替换为 PostgreSQL repository。
+- 本地 worker 替换为 Redis + BullMQ。
+- PollingProgressPublisher 替换为 SSEProgressPublisher。
+- LocalFileStorage 替换为对象存储。
+- 增加任务暂停和恢复。
+- 增加并发控制和速率限制。
+
+### 12.4 产品能力扩展
+
+- 书架管理。
+- 播放进度同步。
+- 字幕和文本同步。
+- 自定义清洗规则。
+- 多 TTS Provider。
+
+## 13. 推荐开发节奏
+
+建议按 Codex 小任务推进，每次只做一个明确模块。
+
+```text
+第 1 次：创建 Next.js + TypeScript 骨架
+第 2 次：配置 Tailwind、ESLint、Prettier、Vitest
+第 3 次：创建 app、features、server、shared、worker 目录
+第 4 次：定义 Zod schema、domain entities 和状态类型
+第 5 次：实现 Drizzle schema、SQLite 初始化和 repository
+第 6 次：实现上传 Route Handler 和 CreateBookJob
+第 7 次：实现 UploadPage
+第 8 次：实现 decodeText 并写测试
+第 9 次：实现 cleanText 并写测试
+第 10 次：实现 detectChapters 并写测试
+第 11 次：实现 splitChapter / planParts 并写测试
+第 12 次：实现 worker、JobRunner 和 JobPage 轮询
+第 13 次：实现 TTSProvider、edgeTtsProvider、buildChunks、chunkCache
+第 14 次：实现 AudioAssembler 和 ffmpegAudio
+第 15 次：实现 RunPipelineJob
+第 16 次：实现 PlayerPage 和播放器 store
+第 17 次：补失败重试和 RetryPanel
+第 18 次：补组件测试、Playwright E2E、移动端布局和 README
+```
+
+每次任务都要包含：
+
+- 目标。
+- 涉及文件。
+- 验收标准。
+- 是否需要测试。
+- 完成后如何手动验证。
+
+## 14. 第一阶段完成定义
+
+当以下条件满足时，第一阶段可以认为完成：
+
+- 能上传或粘贴 TXT。
+- 能自动解码和清洗文本。
+- 能识别章节。
+- 能规划听书 part。
+- 能用 edge-tts 生成音频。
+- 能用 FFmpeg 拼接音频。
+- 能在前端看到任务进度。
+- 能在前端播放生成音频。
+- 失败 chunk 能看到错误并重试。
+- 手机视口下上传、任务、播放三个页面可用。
+- API DTO、前端类型、测试 mock 由 shared schema 对齐。
+- README 能让面试官或自己在本地跑起来。
+- 通过解耦验收清单，没有明显跨层直接依赖。
+</file>
+
+<file path="docs/development-plan.md">
+# 匠魂书音开发计划
+
+## 1. 项目目标
+
+匠魂书音是一个将中文 TXT 小说转换成分段音频的本地工具。
+
+```text
+上传 TXT / 粘贴文本
+-> 解码与清洗
+-> 章节识别
+-> part 规划
+-> TTS 分块合成
+-> FFmpeg 拼接
+-> 查看任务进度
+-> 播放音频
+```
+
+项目用于展示前端岗位能力，重点是：
+
+- 复杂业务页面和状态设计。
+- 长任务进度、失败和局部重试。
+- 播放器和移动端体验。
+- TypeScript 类型建模和 API 契约。
+- 测试、错误处理和可维护的代码组织。
+
+第一版只做本地单用户，不做登录、多用户、云同步和生产部署。
+
+## 2. 技术选型
+
+```text
+框架：Next.js + App Router
+语言：TypeScript
+UI：React
+样式：Tailwind CSS
+API：Next.js Route Handlers
+请求与缓存：TanStack Query
+跨页面状态：Zustand
+数据库：SQLite + Drizzle ORM
+数据校验：Zod
+任务执行：Node Worker + p-queue
+文件与命令：node:fs/promises + execa
+TTS：edge-tts，封装为 TTSProvider
+音频：FFmpeg，封装为 AudioAssembler
+测试：Vitest + React Testing Library + Playwright
+质量：ESLint + Prettier
+```
+
+选型原则：
+
+- 页面、API、worker 和共享数据都使用 TypeScript。
+- Next.js 负责页面和轻量 BFF。
+- Worker 负责 TTS、FFmpeg 和长任务状态更新。
+- SQLite 只服务本地 MVP。
+- 只抽象 TTS、存储、数据库、音频和任务执行器。
+- 文本处理保持普通函数，不为了架构增加无意义的接口。
+
+## 3. 运行边界
+
+```text
+Next.js 页面
+  -> Route Handlers：上传、查询、重试
+  -> SQLite：保存书籍、任务和音频状态
+
+Node Worker
+  -> 读取任务
+  -> 文本处理
+  -> TTS 分块
+  -> FFmpeg 拼接
+  -> 更新任务进度
+
+浏览器
+  -> TanStack Query 轮询任务
+  -> Zustand 管理播放器
+  -> 播放 part 音频
+```
+
+Route Handler 只创建任务、查询状态和触发重试，不同步执行完整 TTS 流程。
+
+## 4. 文件结构
+
+```text
+src/
+├─ app/
+│  ├─ upload/page.tsx
+│  ├─ jobs/[jobId]/page.tsx
+│  ├─ books/page.tsx
+│  ├─ books/[bookId]/player/page.tsx
+│  └─ api/**/route.ts
+├─ features/
+│  ├─ upload/
+│  ├─ job/
+│  ├─ player/
+│  ├─ library/
+│  └─ ui/
+├─ server/
+│  ├─ domain/
+│  ├─ application/
+│  ├─ ports/
+│  ├─ infrastructure/
+│  ├─ pipeline/
+│  ├─ tts/
+│  └─ composition/container.ts
+├─ shared/
+│  ├─ schemas/
+│  └─ types/
+└─ worker/
+   ├─ index.ts
+   └─ handlers/
+
+tests/
+storage/
+```
+
+目录详细职责和调用方向见 `docs/module-dependencies.md`。
+
+## 5. 核心数据
+
+```text
+Book
+- id, title, author, sourcePath, status, createdAt
+
+Job
+- id, bookId, status, stage, progress
+- errorMessage, createdAt, updatedAt
+
+Part
+- id, bookId, index, title
+- audioPath, durationSeconds, status
+
+Chunk
+- id, partId, index, textHash, audioPath
+- status, retryCount, errorMessage
+```
+
+任务状态：
+
+```text
+queued
+processing
+completed
+failed
+cancelled
+```
+
+任务阶段：
+
+```text
+decoding
+cleaning
+chapter_detection
+planning
+tts
+assembling
+completed
+```
+
+## 6. 前端页面
+
+### 上传页
+
+支持文件拖拽、文本粘贴、书名、作者、音色、语速和开始生成。
+
+必须处理空文本、文件类型错误、loading、失败和禁用状态。
+
+### 任务页
+
+展示当前阶段、总进度、part/chunk 数量、失败 chunk、错误原因和重试按钮。
+
+轮询由 TanStack Query 管理，任务进入 `completed`、`failed` 或 `cancelled` 后停止。
+
+### 播放页
+
+展示当前 part、播放列表、上一段/下一段、时长、下载和移动端 MiniPlayer。
+
+播放器跨页面状态只放在 Zustand store。
+
+### 书架页
+
+展示书名、作者、状态、part 数量、总时长和创建时间，并提供继续播放和查看任务入口。
+
+## 7. MVP 里程碑
+
+详细功能、前置依赖和验收标准见 `docs/implementation-roadmap.md`。
+
+### M1：工程骨架
+
+- 初始化 Next.js + TypeScript。
+- 配置 Tailwind、ESLint、Prettier、Vitest。
+- 建立基础目录。
+- 实现 `/api/health`。
+
+验收：页面和 API 都能启动。
+
+### M2：类型和数据库
+
+- 定义 Zod schema、domain 类型和状态。
+- 配置 Drizzle + SQLite。
+- 实现最小 repository。
+
+验收：能创建和查询 Book、Job。
+
+### M3：上传闭环
+
+- 实现文件/文本上传。
+- 保存原始文本。
+- 创建 Book 和 Job。
+- 上传后跳转任务页。
+
+验收：数据库和 `storage/sources` 都有记录。
+
+### M4：文本解析
+
+- 实现解码、清洗、章节识别和 part 规划。
+- 生成清洗报告。
+
+验收：一个 TXT 能得到稳定的结构化章节和 part 计划。
+
+### M5：Worker、TTS 和 FFmpeg
+
+- 实现 worker。
+- 实现 chunk 切分、缓存、TTS 和音频拼接。
+
+验收：多个 chunk 能生成一个可播放的 part。
+
+### M6：任务状态和失败恢复
+
+- 串起完整流水线。
+- 更新 job、part、chunk 状态。
+- 任务页轮询真实进度。
+- 支持单个 chunk 重试。
+
+验收：失败 chunk 可以展示原因并恢复，不重跑整本书。
+
+### M7：播放器、书架和交付
+
+- 完成播放器、MiniPlayer 和书架。
+- 补齐响应式、loading、empty、error 状态。
+- 增加组件测试、关键 E2E 和 README。
+
+验收：上传、任务、播放三条主路径在桌面端和手机端可用。
+
+## 8. 测试和质量
+
+优先覆盖：
+
+```text
+Vitest：编码、清洗、章节、part/chunk、RunPipelineJob
+React Testing Library：Upload、JobProgress、Retry、AudioPlayer
+Playwright：上传 -> 任务页、任务完成 -> 播放页
+```
+
+修改任务状态、轮询、缓存、重试、API schema 或播放器行为时必须补测试。
+
+README 必须包含依赖安装、FFmpeg 检查、启动命令和常见故障。
+
+## 9. 面试表达
+
+```text
+我用 Next.js 和 TypeScript 做了一个长任务驱动的听书生成工具。
+前端重点解决上传、任务进度、失败恢复、播放器和移动端适配。
+Route Handlers 只负责 API 入口，TTS 和 FFmpeg 放到独立 worker 中执行。
+前后端通过 Zod 共享数据契约，TanStack Query 管理任务轮询和缓存，Zustand 管理播放器状态。
+第一版使用 SQLite、本地文件和本地 worker 控制复杂度。
+```
+
+## 10. 第一阶段完成定义
+
+- 可以上传或粘贴 TXT。
+- 可以解码、清洗、识别章节并规划 part。
+- 可以通过 worker 生成和拼接音频。
+- 前端可以看到真实任务进度。
+- 失败 chunk 可以单独查看和重试。
+- 前端可以播放多个 part。
+- 桌面端和手机端主流程可用。
+- 核心 pipeline、任务用例、关键组件和主流程有测试。
+- README 可以让别人本地运行。
+</file>
+
+<file path="docs/implementation-roadmap.md">
+# 功能开发顺序
+
+本文件只描述要做哪些功能、每一步的依赖和验收标准。总体架构以 `docs/development-plan.md` 为准，模块调用方向以 `docs/module-dependencies.md` 为准。
+
+## 1. 开发原则
+
+- 先打通最小闭环，再补复杂状态。
+- 每个阶段完成后项目都能启动和验证。
+- 先做真实业务，再做视觉打磨。
+- 前端主流程优先于后端扩展能力。
+- 没有前置依赖的功能不要提前实现。
+- 不在 MVP 阶段加入登录、队列集群、云存储或复杂实时通信。
+
+## 2. 功能依赖总图
+
+```text
+工程骨架
+  |
+  +--> 类型契约
+  |      |
+  |      +--> 数据库
+  |      +--> API
+  |             |
+  |             v
+  |         上传闭环
+  |             |
+  |             v
+  |         文本解析
+  |             |
+  |             v
+  |         Worker
+  |             |
+  |             v
+  |         TTS + FFmpeg
+  |             |
+  |             v
+  |         任务进度
+  |             |
+  |             +--> 失败重试
+  |             |
+  |             v
+  |         播放器
+  |             |
+  |             v
+  |         书架 + 移动端 + 测试
+```
+
+## 3. 阶段一：工程骨架
+
+### 功能
+
+- 初始化 Next.js + TypeScript。
+- 配置 App Router。
+- 配置 Tailwind、ESLint、Prettier、严格 TypeScript。
+- 建立 `app`、`features`、`server`、`shared`、`worker`、`tests`。
+- 创建根布局和基础页面。
+- 创建 `GET /api/health`。
+
+### 依赖
+
+无。
+
+### 验收
+
+- `next dev` 可以启动。
+- 首页可以访问。
+- 页面可以请求 `/api/health`。
+- lint 和 TypeScript 检查可以运行。
+
+### 暂时不要做
+
+- 不接数据库。
+- 不接 TTS。
+- 不创建完整页面目录。
+- 不提前写空的 domain、ports 和 infrastructure 文件。
+
+## 4. 阶段二：类型契约和数据库
+
+### 功能
+
+- 定义 `Book`、`Job`、`Part`、`Chunk`。
+- 定义任务状态和任务阶段。
+- 使用 Zod 定义 upload、job、book、player schema。
+- 配置 Drizzle + SQLite。
+- 创建最小数据库 schema。
+- 实现 Book、Job、Part、Chunk repository。
+
+### 依赖
+
+- 阶段一工程骨架。
+
+### 验收
+
+- 可以初始化 SQLite。
+- 可以创建和读取 Book。
+- 可以创建和读取 Job。
+- API DTO 能从 shared schema 推导。
+- domain 不依赖 Drizzle。
+
+### 测试
+
+- repository 基础读写测试。
+- schema 合法和非法输入测试。
+
+## 5. 阶段三：上传闭环
+
+### 功能
+
+- 实现文件上传。
+- 实现文本粘贴。
+- 保存原始文本到 `storage/sources`。
+- 创建 Book 和 Job。
+- 返回 `bookId`、`jobId`。
+- 创建 UploadPage。
+- 支持 loading、error、disabled。
+
+### 依赖
+
+- 阶段二类型和数据库。
+- Local Storage 实现。
+- CreateBookJob。
+
+### 验收
+
+- 选择 TXT 后可以提交。
+- 粘贴文本后可以提交。
+- 空文本不能提交。
+- 文件类型错误有明确提示。
+- 数据库出现 Book 和 Job。
+- 上传成功后跳转 `/jobs/[jobId]`。
+
+### 测试
+
+- 上传 schema 测试。
+- CreateBookJob application 测试。
+- UploadForm 组件测试。
+
+## 6. 阶段四：文本解析
+
+### 功能
+
+- UTF-8、UTF-8 BOM、GBK、Big5 解码。
+- 合并空行和去除首尾空白。
+- 识别常见广告行。
+- 识别中文章节标题。
+- 无章节文本回退为单章。
+- 超长章节切分。
+- 按目标听书时长规划 part。
+- 生成清洗和解析报告。
+
+### 依赖
+
+- 阶段二 domain 和 shared 类型。
+- 阶段三原始文本保存。
+
+### 验收
+
+- 给定样本文本可以得到稳定的结构化结果。
+- 清洗不会删除普通正文。
+- 无法识别章节时仍然可以继续生成。
+- pipeline 不访问数据库和 storage。
+
+### 测试
+
+- 每个纯函数至少覆盖正常输入、空输入和异常边界。
+- 重点测试编码、章节标题、超长章节和 part 边界。
+
+## 7. 阶段五：Worker 基础设施
+
+### 功能
+
+- 创建 worker 进程入口。
+- 创建 JobRunner。
+- worker 可以读取 queued job。
+- worker 可以更新 processing、completed、failed 状态。
+- 记录错误消息和更新时间。
+- 加入基础并发限制。
+
+### 依赖
+
+- 阶段二数据库。
+- 阶段四 pipeline。
+- RunPipelineJob application。
+
+### 验收
+
+- 手动创建一个 job 后，worker 可以消费它。
+- worker 崩溃或任务失败时，job 不会永久停留在 processing。
+- worker 不依赖 React、页面和 Route Handler。
+
+### 暂时不要做
+
+- 不接 Redis。
+- 不接 BullMQ。
+- 不做分布式 worker。
+- 不做暂停和恢复。
+
+## 8. 阶段六：TTS 分块和缓存
+
+### 功能
+
+- 配置默认中文音色。
+- 按段落和句号切分 chunk。
+- 限制 chunk 长度在合理范围。
+- 创建包含 voice、rate、pitch、textHash 的缓存 key。
+- 命中缓存时跳过 TTS。
+- TTS 失败时支持有限次数重试。
+
+### 依赖
+
+- 阶段五 worker。
+- TTSProvider。
+- FileStorage。
+
+### 验收
+
+- 一段短文本能生成音频文件。
+- 相同文本和参数不会重复合成。
+- 修改音色或语速不会复用错误缓存。
+- TTS 失败能记录到 chunk。
+
+### 测试
+
+- chunk 切分测试。
+- cache key 测试。
+- retry policy 测试。
+- 使用 fake TTS 测试 application。
+
+## 9. 阶段七：FFmpeg 拼接
+
+### 功能
+
+- 检查 FFmpeg 是否安装。
+- 检查 chunk 文件是否存在。
+- 生成 concat list。
+- 拼接多个 chunk 为一个 part。
+- 获取 part 时长。
+- 拼接失败时记录可展示错误。
+
+### 依赖
+
+- 阶段六 chunk 音频。
+- AudioAssembler。
+- execa。
+
+### 验收
+
+- 多个 chunk 可以拼成可播放的 mp3。
+- part 音频 URL 可被浏览器访问。
+- FFmpeg 不可用时有明确错误。
+- 损坏或缺失 chunk 不会静默生成错误音频。
+
+## 10. 阶段八：完整任务流水线
+
+### 功能
+
+按以下顺序串起 `RunPipelineJob`：
+
+```text
+读取原文
+-> 解码
+-> 清洗
+-> 章节识别
+-> part 规划
+-> 创建 Part / Chunk
+-> TTS 合成 chunk
+-> FFmpeg 拼接 part
+-> 写入最终状态
+```
+
+每一步更新：
+
+```text
+job.status
+job.stage
+job.progress
+part.status
+chunk.status
+errorMessage
+```
+
+### 依赖
+
+- 阶段四 pipeline。
+- 阶段五 worker。
+- 阶段六 TTS。
+- 阶段七 FFmpeg。
+
+### 验收
+
+- 一个小 TXT 可以生成多个 part。
+- job 进度会随着阶段变化。
+- part 和 chunk 状态与真实结果一致。
+- 任务成功和失败都能结束，不会无限 processing。
+
+### 测试
+
+- 使用 fake provider 的 RunPipelineJob 测试。
+- 至少覆盖 TTS 失败、FFmpeg 失败和成功路径。
+
+## 11. 阶段九：任务页和失败恢复
+
+### 功能
+
+- 创建 JobPage。
+- TanStack Query 每 1 到 3 秒轮询。
+- 展示阶段、总进度、part/chunk 数量。
+- 展示失败 chunk 和错误原因。
+- 支持单个 chunk 重试。
+- 任务完成后进入播放器。
+
+### 依赖
+
+- 阶段八真实任务状态。
+- QueryJob。
+- RetryChunk。
+
+### 验收
+
+- queued、processing、completed、failed、cancelled 都有对应 UI。
+- 任务结束后停止轮询。
+- 离开页面时取消请求。
+- 单个 chunk 重试不会重跑整本书。
+- 页面刷新后可以恢复查看任务。
+
+### 测试
+
+- `useJobPolling` 测试停止条件。
+- JobProgress、ChunkStatusList、RetryPanel 组件测试。
+- mock API 错误和失败状态。
+
+## 12. 阶段十：播放器
+
+### 功能
+
+- 获取书籍 part 列表。
+- 播放、暂停、上一段、下一段。
+- 切换 part。
+- 展示当前 part 和播放进度。
+- 支持音频下载。
+- 使用 Zustand 保存跨页面播放器状态。
+- 增加移动端 MiniPlayer。
+
+### 依赖
+
+- 阶段八生成的 part 音频。
+- QueryPlayer。
+- JobPage 完成跳转。
+
+### 验收
+
+- 可以连续播放多个 part。
+- 切换 part 不会播放错误音频。
+- 刷新页面后可以重新加载播放列表。
+- 手机宽度下播放器可用。
+- 播放器状态没有散落在页面组件中。
+
+### 测试
+
+- AudioPlayer 组件测试。
+- 播放列表切换测试。
+- 至少一条 Playwright 播放页流程。
+
+## 13. 阶段十一：书架和前端打磨
+
+### 功能
+
+- 创建 LibraryPage。
+- 展示书名、作者、状态、part 数量、总时长、创建时间。
+- 提供继续播放和查看任务。
+- 完善空状态、错误状态、加载状态。
+- 完善桌面端和移动端布局。
+- 统一按钮、表单、进度、弹窗和提示组件。
+
+### 依赖
+
+- 阶段九任务查询。
+- 阶段十播放器。
+
+### 验收
+
+- 可以从书架进入任务页和播放页。
+- 没有书籍时有空状态。
+- 加载和错误不会导致页面布局跳动。
+- 上传、任务、播放三个页面在手机视口下可用。
+
+## 14. 阶段十二：质量和交付
+
+### 功能
+
+- 补齐核心 pipeline 和 application 测试。
+- 补齐 Upload、Job、Player 组件测试。
+- 增加两条关键 Playwright E2E：
+  - 上传到任务页。
+  - 任务完成到播放页。
+- 增加 FFmpeg 检查脚本。
+- 增加数据库初始化脚本。
+- 完善 README。
+- 录制完整流程演示。
+
+### 验收
+
+- `lint` 通过。
+- TypeScript 检查通过。
+- 单元测试通过。
+- 关键 E2E 通过。
+- 新环境可以按照 README 启动。
+- 面试官可以在本地跑通主流程。
+
+## 15. 推荐开发粒度
+
+每次只实现一个可验证的小任务：
+
+```text
+创建一个 schema
+实现一个 repository 方法
+实现一个 pipeline 函数
+实现一个 application use case
+实现一个 Route Handler
+实现一个页面状态
+实现一个组件
+补一个测试场景
+```
+
+每个任务必须写清楚：
+
+- 目标。
+- 涉及文件。
+- 前置依赖。
+- 验收标准。
+- 测试要求。
+- 手动验证方式。
+
+## 16. 不应提前实现
+
+在 MVP 完成前，不做：
+
+- 登录和权限。
+- PostgreSQL。
+- Redis、BullMQ。
+- SSE、WebSocket。
+- 对象存储。
+- 播放进度云同步。
+- 字幕、波形图和文本跟读。
+- 多 TTS Provider 的完整配置页面。
+- 复杂管理后台。
+</file>
+
+<file path="docs/module-dependencies.md">
+# 模块依赖关系
+
+本文件只描述模块职责、依赖方向和关键调用链。总体方案见 `docs/development-plan.md`，功能顺序见 `docs/implementation-roadmap.md`。
+
+## 1. 依赖总图
+
+```text
+页面
+  -> features
+  -> API client
+  -> Route Handler
+  -> application
+  -> ports
+  -> infrastructure
+
+worker
+  -> application
+  -> ports
+  -> infrastructure
+
+pipeline
+  -> domain / shared
+
+domain
+  -> 基础类型
+```
+
+核心原则：
+
+```text
+高层业务依赖低层抽象。
+具体技术实现只在 infrastructure。
+页面不依赖 server 实现。
+pipeline 不依赖数据库和文件系统。
+worker 不依赖 React 和页面。
+```
+
+## 2. 模块职责
+
+| 模块 | 负责 | 不负责 |
+| --- | --- | --- |
+| `src/app` | 页面、布局、Route Handler | 核心业务、数据库细节、TTS |
+| `src/features` | 前端组件、hooks、客户端状态 | 数据库、FFmpeg、文件系统 |
+| `src/shared` | Zod schema、共享类型、常量 | 业务执行、数据库 |
+| `server/domain` | 实体、状态、业务错误 | 框架、ORM、外部服务 |
+| `server/application` | 编排业务用例 | HTTP、ORM、具体 provider |
+| `server/ports` | 定义外部依赖接口 | 具体实现 |
+| `server/infrastructure` | 数据库、存储、TTS、FFmpeg | 页面和业务流程 |
+| `server/pipeline` | 解码、清洗、章节和分段规划 | 数据库、TTS、文件写入 |
+| `server/tts` | chunk 切分、缓存和重试策略 | 具体 TTS 调用 |
+| `server/composition` | 组装依赖 | 业务逻辑 |
+| `worker` | 执行长任务 | 页面、HTTP 响应 |
+
+## 3. 允许的依赖方向
+
+### 前端
+
+```text
+app
+  -> features
+  -> shared
+```
+
+允许：
+
+- 页面使用 feature 组件。
+- feature hooks 使用 TanStack Query。
+- player feature 使用 Zustand。
+- API client 使用 shared schema 和类型。
+
+禁止：
+
+- 页面 import `src/server/**`。
+- 页面访问 SQLite、文件系统、FFmpeg 或 TTS。
+- 页面自己实现复杂轮询。
+- 页面自己维护跨页面播放器状态。
+
+### Route Handler
+
+```text
+Route Handler
+  -> shared schema
+  -> application use case
+  -> 返回 DTO
+```
+
+只负责：
+
+1. 读取 HTTP 入参。
+2. 使用 Zod 校验。
+3. 调用 application。
+4. 返回状态码和 DTO。
+
+禁止直接调用 pipeline、Drizzle、edge-tts 或 FFmpeg。
+
+### Application
+
+```text
+application
+  -> domain
+  -> ports
+  -> pipeline
+  -> tts
+```
+
+禁止：
+
+- import Next.js、React、Drizzle、edge-tts、execa。
+- 拼接具体 storage 路径。
+- 依赖 infrastructure 中的具体类。
+- 判断 HTTP 请求或响应。
+
+### Domain
+
+只依赖 TypeScript 基础类型和必要的 shared 类型。
+
+禁止依赖 Next.js、React、Drizzle、Node 文件系统、FFmpeg 和 edge-tts。
+
+### Pipeline
+
+pipeline 必须是可独立测试的普通函数：
+
+- 输入普通数据，输出普通数据。
+- 不读写数据库。
+- 不读写 `storage`。
+- 不调用 TTS。
+- 不调用 FFmpeg。
+
+### Ports
+
+Ports 只定义接口和基础数据类型：
+
+```text
+BookRepository
+JobRepository
+PartRepository
+ChunkRepository
+FileStorage
+TTSProvider
+AudioAssembler
+JobRunner
+```
+
+Ports 中不能出现 SQLite、Drizzle、edge-tts、FFmpeg、execa 或具体路径。
+
+### Infrastructure
+
+```text
+infrastructure
+  -> ports
+  -> domain
+  -> 第三方库
+  -> Node.js API
+```
+
+具体实现：
+
+```text
+db/repositories.ts -> Repository
+localStorage.ts -> FileStorage
+edgeTtsProvider.ts -> TTSProvider
+ffmpegAudio.ts -> AudioAssembler
+localJobRunner.ts -> JobRunner
+```
+
+### Worker
+
+```text
+worker
+  -> application
+  -> composition/container
+  -> infrastructure
+```
+
+Worker 负责读取任务、执行流水线、更新状态和记录错误，不负责页面渲染、浏览器事件或 HTTP 响应。
+
+## 4. 关键调用链
+
+### 创建任务
+
+```text
+UploadPage
+  -> upload API
+  -> Route Handler
+  -> CreateBookJob
+  -> FileStorage
+  -> BookRepository + JobRepository
+  -> 返回 bookId + jobId
+```
+
+### 执行任务
+
+```text
+Worker
+  -> RunPipelineJob
+  -> FileStorage
+  -> pipeline
+  -> buildChunks
+  -> TTSProvider
+  -> ChunkRepository
+  -> AudioAssembler
+  -> PartRepository
+  -> JobRepository
+```
+
+### 查询进度
+
+```text
+JobPage
+  -> TanStack Query
+  -> GET /api/jobs/{jobId}
+  -> QueryJob
+  -> JobRepository
+  -> Job DTO
+```
+
+### 播放音频
+
+```text
+PlayerPage
+  -> GET /api/player/books/{bookId}
+  -> QueryPlayer
+  -> PartRepository
+  -> part 列表和 audioUrl
+  -> playerStore + HTMLAudioElement
+```
+
+## 5. 依赖注入
+
+只在 `src/server/composition/container.ts` 组装具体实现：
+
+```ts
+const repositories = createRepositories(db);
+const storage = createLocalStorage(config.storageRoot);
+const tts = createEdgeTtsProvider(config.tts);
+const audio = createFfmpegAudio(config.ffmpegPath);
+
+return {
+  createBookJob: createCreateBookJob({ repositories, storage }),
+  runPipelineJob: createRunPipelineJob({
+    repositories,
+    storage,
+    tts,
+    audio,
+  }),
+};
+```
+
+不要在页面、Route Handler 或 application 中散落具体 provider 的实例化。
+
+## 6. 依赖检查
+
+跨模块任务完成后检查：
+
+```text
+Route Handler 是否直接调用 infrastructure？
+application 是否 import 具体第三方实现？
+pipeline 是否访问数据库或 storage？
+页面是否 import server？
+worker 是否依赖 React？
+共享 schema 是否被调用方复用？
+是否出现第二份服务端数据状态？
+```
+</file>
+
+<file path="src/app/api/health/route.ts">
+import { NextResponse } from "next/server";
+import { createHealthResponse } from "@/shared/health";
+
+export function GET() {
+  return NextResponse.json(createHealthResponse());
+}
+</file>
+
+<file path="src/app/globals.css">
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  background: #f4f1ea;
+  color: #25231f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), transparent 42%), #f4f1ea;
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="src/app/layout.tsx">
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "匠魂书音",
+  description: "本地中文文本有声化工具",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="zh-CN">
+      <body>{children}</body>
+    </html>
+  );
+}
+</file>
+
+<file path="src/app/page.tsx">
+import { HealthStatus } from "@/features/health/health-status";
+
+export default function HomePage() {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-6 py-12">
+      <section className="w-full max-w-2xl border border-stone-300 bg-white/80 p-8 shadow-sm sm:p-12">
+        <div className="mb-10">
+          <p className="mb-3 text-sm font-semibold tracking-[0.18em] text-amber-700 uppercase">
+            工程骨架
+          </p>
+          <h1 className="text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
+            匠魂书音
+          </h1>
+          <p className="mt-4 max-w-xl text-base leading-7 text-stone-600">
+            本地中文文本有声化工具的第一阶段工程入口。
+          </p>
+        </div>
+
+        <HealthStatus />
+      </section>
+    </main>
+  );
+}
+</file>
+
+<file path="src/features/health/health-status.tsx">
+"use client";
+
+import { useEffect, useState } from "react";
+import type { HealthResponse } from "@/shared/health";
+
+type HealthState =
+  | { status: "loading" }
+  | { status: "success"; data: HealthResponse }
+  | { status: "error" };
+
+export function HealthStatus() {
+  const [health, setHealth] = useState<HealthState>({ status: "loading" });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadHealth() {
+      try {
+        const response = await fetch("/api/health", {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Health request failed");
+        }
+
+        const data = (await response.json()) as HealthResponse;
+        setHealth({ status: "success", data });
+      } catch {
+        if (!controller.signal.aborted) {
+          setHealth({ status: "error" });
+        }
+      }
+    }
+
+    void loadHealth();
+
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <div className="border-t border-stone-200 pt-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-stone-500">API 健康状态</p>
+          <p className="mt-1 text-lg font-semibold text-stone-900">
+            {health.status === "loading" && "检查中..."}
+            {health.status === "success" && "运行正常"}
+            {health.status === "error" && "暂时不可用"}
+          </p>
+        </div>
+        <span
+          aria-label={`API 状态：${health.status}`}
+          className={`h-3 w-3 shrink-0 rounded-full ${
+            health.status === "success"
+              ? "bg-emerald-500"
+              : health.status === "error"
+                ? "bg-red-500"
+                : "bg-amber-400"
+          }`}
+        />
+      </div>
+
+      {health.status === "success" && (
+        <p className="mt-4 text-sm text-stone-500">
+          服务：{health.data.service} · 响应时间：
+          {new Date(health.data.timestamp).toLocaleTimeString("zh-CN")}
+        </p>
+      )}
+
+      {health.status === "error" && (
+        <p className="mt-4 text-sm text-red-700">
+          无法连接健康检查接口，请确认开发服务器仍在运行。
+        </p>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/shared/health.ts">
+export const HEALTH_STATUS = "ok" as const;
+
+export type HealthResponse = {
+  status: typeof HEALTH_STATUS;
+  service: "jianghun-shuyin";
+  timestamp: string;
+};
+
+export function createHealthResponse(now: Date = new Date()): HealthResponse {
+  return {
+    status: HEALTH_STATUS,
+    service: "jianghun-shuyin",
+    timestamp: now.toISOString(),
+  };
+}
+</file>
+
+<file path="tests/health.test.ts">
+import { describe, expect, it } from "vitest";
+import { createHealthResponse } from "../src/shared/health";
+
+describe("createHealthResponse", () => {
+  it("returns a stable health payload", () => {
+    const response = createHealthResponse(new Date("2026-01-02T03:04:05.000Z"));
+
+    expect(response).toEqual({
+      status: "ok",
+      service: "jianghun-shuyin",
+      timestamp: "2026-01-02T03:04:05.000Z",
+    });
+  });
+});
+</file>
+
+<file path=".gitignore">
+node_modules
+.pnpm-store
+.next
+out
+coverage
+.env*
+!.env.example
+*.log
+*.tsbuildinfo
+</file>
+
+<file path=".prettierignore">
+.next
+node_modules
+coverage
+pnpm-lock.yaml
+docs
+</file>
+
+<file path=".prettierrc.json">
+{
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "plugins": ["prettier-plugin-tailwindcss"]
+}
+</file>
+
+<file path="AGENTS.md">
+# 匠魂书音项目规则
+
+## 1. 规则来源
+
+- 总体计划：`docs/development-plan.md`
+- 模块依赖：`docs/module-dependencies.md`
+- 功能顺序：`docs/implementation-roadmap.md`
+- `docs/.archive/development-plan.backup.md` 是历史备份。除非用户明确要求对比或恢复，否则不要读取、引用或修改。
+
+本文件只保留必须遵守的工程规则，不重复上述文档的详细内容。
+
+## 2. 固定技术栈
+
+```text
+Next.js + App Router
+TypeScript
+React
+Tailwind CSS
+TanStack Query
+Zustand
+SQLite + Drizzle ORM
+Zod
+Node Worker + p-queue
+execa + FFmpeg
+edge-tts
+Vitest + React Testing Library + Playwright
+ESLint + Prettier
+```
+
+未经用户同意，不要替换为 Python/FastAPI、另一套前端框架、另一套状态管理方案或生产级基础设施。
+
+MVP 阶段不引入 PostgreSQL、Redis、BullMQ、SSE、WebSocket、对象存储和登录系统。
+
+## 3. 核心边界
+
+```text
+src/app
+  页面、布局、Route Handlers
+
+src/features
+  上传、任务、播放器、书架和 UI
+
+src/shared
+  Zod schema、共享类型、常量
+
+src/server/domain
+  实体、状态、业务错误
+
+src/server/application
+  业务用例编排
+
+src/server/ports
+  外部依赖接口
+
+src/server/infrastructure
+  数据库、文件、TTS、FFmpeg、Worker 实现
+
+src/server/pipeline
+  解码、清洗、章节识别、分段规划
+
+src/worker
+  长任务执行
+```
+
+必须遵守：
+
+- 页面不直接访问数据库、文件系统、FFmpeg 或 TTS。
+- 页面不直接实现复杂请求、轮询和跨页面播放器状态。
+- Route Handler 只负责参数校验、调用 use case 和返回 DTO。
+- Route Handler 不同步执行完整 TTS 或 FFmpeg 流程。
+- application 不依赖 Next.js、React、Drizzle 或具体 provider。
+- pipeline 不访问数据库和 storage。
+- domain 不依赖框架、ORM、TTS 或 FFmpeg。
+- worker 不依赖 React、页面和浏览器 API。
+
+## 4. 类型和 API
+
+- TypeScript 开启严格模式。
+- API 入参和出参使用 Zod 校验。
+- 前端、Route Handler、worker 和测试尽量复用 `src/shared` 的 schema 和类型。
+- 不要在前后端复制相同 DTO。
+- 任务状态和阶段使用统一类型。
+- 修改 API 契约时，同时更新 schema、调用方、mock、测试和 README。
+- API 错误使用稳定错误码或错误类型，前端不要依赖错误文案判断业务状态。
+
+## 5. 前端状态
+
+- 服务端数据使用 TanStack Query。
+- 跨页面播放器状态使用 Zustand。
+- 不要把服务端查询结果复制到 Zustand。
+- 轮询在 `completed`、`failed`、`cancelled` 后停止。
+- 页面离开时取消请求。
+- 页面和组件必须处理 loading、error、empty、disabled 状态。
+
+## 6. 服务端实现
+
+- SQLite 只服务本地 MVP。
+- 数据库访问集中在 infrastructure repository。
+- 文件路径集中管理，application 和页面不得手写 storage 路径。
+- TTS 调用必须通过 `TTSProvider`。
+- FFmpeg 调用必须通过 `AudioAssembler`。
+- chunk 缓存 key 至少包含文本 hash、音色、语速和音调。
+- 单个 chunk 失败时只重试该 chunk，不重跑整本书。
+- 具体实现统一在 `src/server/composition/container.ts` 组装。
+
+## 7. 开发和修改方式
+
+开始任务前：
+
+1. 阅读本文件和相关计划文档。
+2. 检查当前工作区和已有改动。
+3. 阅读受影响的现有代码，再决定修改范围。
+
+实现任务时：
+
+1. 优先复用现有目录、类型、hook 和组件。
+2. 保持修改范围小，不做无关重构。
+3. 先实现最小可运行路径，再补错误状态和测试。
+4. 不因为计划中存在目录就创建空文件。
+5. 不提前实现当前任务不需要的基础设施。
+
+## 8. 测试和交付
+
+- 修改业务逻辑时补相关测试。
+- 修改任务状态、轮询、缓存、重试、API schema 或播放器行为时必须测试。
+- 纯函数优先使用 Vitest。
+- 交互组件使用 React Testing Library。
+- 主流程使用 Playwright。
+- 完成后优先运行相关 lint、TypeScript 检查和测试；如果用户明确要求手动验证，则由用户执行这些命令并把结果发回。
+- 手动验证受影响的主流程。
+- 汇报修改文件、验证结果和未完成事项。
+
+## 9. Git 保存
+
+- 每次大的开发单元完成后，必须使用 Git 保存为一个独立 commit。
+- 提交前必须检查工作区状态，确认只包含本次开发相关的修改。
+- 提交前完成适用的 lint、TypeScript 检查和测试；若用户已接手最后验证，则等用户反馈结果后再提交。
+- 一个大的开发单元不要混入无关修改；必要时拆分为多个清晰的 commit。
+- 交付时汇报 commit id、提交内容和验证结果。
+
+## 10. 用户指令优先
+
+本文件和计划文档是默认约束，不是对用户明确要求的永久禁止。用户明确要求改变技术栈、范围或开发顺序时，遵循用户最新指令，并说明影响。
+</file>
+
+<file path="eslint.config.mjs">
+import coreWebVitals from "eslint-config-next/core-web-vitals";
+import typescript from "eslint-config-next/typescript";
+
+const eslintConfig = [
+  ...coreWebVitals,
+  ...typescript,
+  {
+    ignores: [".next/**", "node_modules/**", "coverage/**"],
+  },
+];
+
+export default eslintConfig;
+</file>
+
+<file path="next-env.d.ts">
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
+import "./.next/dev/types/root-params.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+};
+
+export default nextConfig;
+</file>
+
+<file path="package.json">
+{
+  "name": "jianghun-shuyin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "drizzle-orm": "^0.44.7",
+    "next": "^16.0.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "drizzle-kit": "^0.31.9",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.0.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
+</file>
+
+<file path="pnpm-workspace.yaml">
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+  - unrs-resolver
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}
+</file>
+
+</files>
