@@ -12,16 +12,21 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "drizzle-orm": "^0.44.7",
     "next": "^16.0.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "^4.1.17",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "drizzle-kit": "^0.31.9",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.1",
     "prettier": "^3.6.2",
