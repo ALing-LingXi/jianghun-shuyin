@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.0.0",
     "better-sqlite3": "^12.8.0",
     "drizzle-orm": "^0.44.7",
     "next": "^16.0.1",

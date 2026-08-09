@@ -6,10 +6,15 @@ import {
   DrizzleJobRepository,
   initializeDatabase,
 } from "@/server/infrastructure/db";
-import { LocalStorage } from "@/server/infrastructure/localStorage";
 import { createBookJob } from "@/server/application/createBookJob";
+import { queryJob } from "@/server/application/queryJob";
+import { LocalStorage } from "@/server/infrastructure/localStorage";
 
-const defaultDatabasePath = path.join(process.cwd(), "storage", "jianghun-shuyin.db");
+const defaultDatabasePath = path.join(
+  process.cwd(),
+  "storage",
+  "jianghun-shuyin.db",
+);
 const defaultStorageRoot = path.join(process.cwd(), "storage");
 
 export function createContainer() {
@@ -25,5 +30,6 @@ export function createContainer() {
   return {
     createBookJob: (input: Parameters<typeof createBookJob>[1]) =>
       createBookJob({ books, jobs, storage }, input),
+    queryJob: (jobId: string) => queryJob({ jobs }, jobId),
   };
 }
