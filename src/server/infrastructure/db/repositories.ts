@@ -10,6 +10,7 @@ import type {
   CreatePartInput,
   JobRepository,
   PartRepository,
+  UpdateJobInput,
 } from "@/server/ports/repositories";
 import type {
   BookStatus,
@@ -72,6 +73,29 @@ export class DrizzleJobRepository implements JobRepository {
   async findById(id: string): Promise<Job | null> {
     const row = this.db.select().from(jobs).where(eq(jobs.id, id)).get();
     return row ? toJob(row) : null;
+  }
+
+  async updateById(id: string, input: UpdateJobInput): Promise<Job | null> {
+    const current = await this.findById(id);
+    if (!current) {
+      return null;
+    }
+
+    const updated: Job = {
+      ...current,
+      ...input,
+      status: input.status ?? current.status,
+      stage: input.stage ?? current.stage,
+      progress: input.progress ?? current.progress,
+      errorMessage:
+        input.errorMessage === undefined
+          ? current.errorMessage
+          : input.errorMessage,
+      updatedAt: new Date(),
+    };
+
+    this.db.update(jobs).set(updated).where(eq(jobs.id, id)).run();
+    return updated;
   }
 }
 

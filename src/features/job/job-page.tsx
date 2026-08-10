@@ -1,47 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from "@tanstack/react-query";
-import { jobSchema, type JobDto } from "@/shared/schemas/job";
-
-class JobApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code?: string,
-  ) {
-    super(message);
-    this.name = "JobApiError";
-  }
-}
-
-async function fetchJob(jobId: string): Promise<JobDto> {
-  const response = await fetch(`/api/jobs/${jobId}`);
-  const body = (await response.json().catch(() => null)) as
-    | { error?: { code?: string; message?: string } }
-    | null;
-
-  if (!response.ok) {
-    throw new JobApiError(
-      body?.error?.message ?? "Job request failed",
-      response.status,
-      body?.error?.code,
-    );
-  }
-
-  return jobSchema.parse(body);
-}
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { JobStatusPanel } from "./components/job-status-panel";
+import { JobApiError, useJobPolling } from "./hooks/useJobPolling";
 
 function JobPageContent({ jobId }: { jobId: string }) {
-  const query = useQuery({
-    queryKey: ["job", jobId],
-    queryFn: () => fetchJob(jobId),
-    retry: false,
-  });
+  const query = useJobPolling(jobId);
 
   if (query.isPending) {
     return (
@@ -63,28 +28,7 @@ function JobPageContent({ jobId }: { jobId: string }) {
     );
   }
 
-  return (
-    <dl className="grid gap-4 rounded border border-stone-200 bg-white p-6">
-      <div>
-        <dt className="text-sm text-stone-500">状态</dt>
-        <dd className="mt-1 text-lg font-semibold text-stone-900">
-          {query.data.status}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm text-stone-500">阶段</dt>
-        <dd className="mt-1 text-lg font-semibold text-stone-900">
-          {query.data.stage}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm text-stone-500">进度</dt>
-        <dd className="mt-1 text-lg font-semibold text-stone-900">
-          {query.data.progress}%
-        </dd>
-      </div>
-    </dl>
-  );
+  return <JobStatusPanel job={query.data} />;
 }
 
 export function JobPage({ jobId }: { jobId: string }) {

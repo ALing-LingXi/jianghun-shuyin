@@ -27,9 +27,17 @@ export type CreateJobInput = {
   errorMessage?: string | null;
 };
 
+export type UpdateJobInput = {
+  status?: JobStatus;
+  stage?: JobStage;
+  progress?: number;
+  errorMessage?: string | null;
+};
+
 export interface JobRepository {
   create(input: CreateJobInput): Promise<Job>;
   findById(id: string): Promise<Job | null>;
+  updateById(id: string, input: UpdateJobInput): Promise<Job | null>;
 }
 
 export type CreatePartInput = {
