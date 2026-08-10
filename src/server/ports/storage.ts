@@ -4,7 +4,14 @@ export type StoreTextInput = {
   subdirectory?: string;
 };
 
+export type StoreBinaryInput = {
+  content: Uint8Array;
+  fileName: string;
+  subdirectory?: string;
+};
+
 export interface FileStorage {
   saveTextSource(input: StoreTextInput): Promise<string>;
   readTextSource(sourcePath: string): Promise<Uint8Array>;
+  saveChunkAudio(input: StoreBinaryInput): Promise<string>;
 }
