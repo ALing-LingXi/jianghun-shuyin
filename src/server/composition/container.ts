@@ -3,11 +3,13 @@ import path from "node:path";
 import {
   createDatabaseClient,
   DrizzleBookRepository,
+  DrizzleChunkRepository,
   DrizzleJobRepository,
   initializeDatabase,
 } from "@/server/infrastructure/db";
 import { createBookJob } from "@/server/application/createBookJob";
 import { queryJob } from "@/server/application/queryJob";
+import { retryChunk } from "@/server/application/retryChunk";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
 import { LocalStorage } from "@/server/infrastructure/localStorage";
 
@@ -26,6 +28,7 @@ export function createContainer() {
 
   const books = new DrizzleBookRepository(client.db);
   const jobs = new DrizzleJobRepository(client.db);
+  const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(defaultStorageRoot);
   const ttsProvider = new EdgeTtsProvider({ storage });
 
@@ -33,6 +36,8 @@ export function createContainer() {
     createBookJob: (input: Parameters<typeof createBookJob>[1]) =>
       createBookJob({ books, jobs, storage }, input),
     queryJob: (jobId: string) => queryJob({ jobs }, jobId),
+    retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
+      retryChunk({ chunks, tts: ttsProvider }, input),
     ttsProvider,
   };
 }

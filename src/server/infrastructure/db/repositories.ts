@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type { Book, Chunk, Job, Part } from "@/server/domain/entities";
 import type {
   BookRepository,
@@ -11,6 +11,7 @@ import type {
   JobRepository,
   PartRepository,
   UpdateJobInput,
+  UpdateChunkInput,
 } from "@/server/ports/repositories";
 import type {
   BookStatus,
@@ -160,6 +161,44 @@ export class DrizzleChunkRepository implements ChunkRepository {
   async findById(id: string): Promise<Chunk | null> {
     const row = this.db.select().from(chunks).where(eq(chunks.id, id)).get();
     return row ? toChunk(row) : null;
+  }
+
+  async findCompletedByTextHash(textHash: string): Promise<Chunk | null> {
+    const row = this.db
+      .select()
+      .from(chunks)
+      .where(
+        and(
+          eq(chunks.textHash, textHash),
+          eq(chunks.status, "completed"),
+          isNotNull(chunks.audioPath),
+        ),
+      )
+      .get();
+
+    return row ? toChunk(row) : null;
+  }
+
+  async updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null> {
+    const current = await this.findById(id);
+    if (!current) {
+      return null;
+    }
+
+    const updated: Chunk = {
+      ...current,
+      ...input,
+      audioPath: input.audioPath === undefined ? current.audioPath : input.audioPath,
+      status: input.status ?? current.status,
+      retryCount: input.retryCount ?? current.retryCount,
+      errorMessage:
+        input.errorMessage === undefined
+          ? current.errorMessage
+          : input.errorMessage,
+    };
+
+    this.db.update(chunks).set(updated).where(eq(chunks.id, id)).run();
+    return updated;
   }
 }
 

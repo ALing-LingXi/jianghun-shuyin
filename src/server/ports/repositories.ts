@@ -64,7 +64,16 @@ export type CreateChunkInput = {
   errorMessage?: string | null;
 };
 
+export type UpdateChunkInput = {
+  audioPath?: string | null;
+  status?: ChunkStatus;
+  retryCount?: number;
+  errorMessage?: string | null;
+};
+
 export interface ChunkRepository {
   create(input: CreateChunkInput): Promise<Chunk>;
   findById(id: string): Promise<Chunk | null>;
+  findCompletedByTextHash(textHash: string): Promise<Chunk | null>;
+  updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null>;
 }
