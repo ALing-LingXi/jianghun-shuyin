@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { Book, Chunk, Job, Part } from "@/server/domain/entities";
 import type {
   BookRepository,
@@ -50,6 +50,20 @@ export class DrizzleBookRepository implements BookRepository {
     const row = this.db.select().from(books).where(eq(books.id, id)).get();
     return row ? toBook(row) : null;
   }
+
+  async listRecent(limit = 50): Promise<Book[]> {
+    return this.db
+      .select()
+      .from(books)
+      .orderBy(desc(books.createdAt))
+      .limit(limit)
+      .all()
+      .map(toBook);
+  }
+
+  async deleteById(id: string): Promise<void> {
+    this.db.delete(books).where(eq(books.id, id)).run();
+  }
 }
 
 export class DrizzleJobRepository implements JobRepository {
@@ -77,6 +91,18 @@ export class DrizzleJobRepository implements JobRepository {
     return row ? toJob(row) : null;
   }
 
+  async findLatestByBookId(bookId: string): Promise<Job | null> {
+    const row = this.db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.bookId, bookId))
+      .orderBy(desc(jobs.createdAt))
+      .limit(1)
+      .get();
+
+    return row ? toJob(row) : null;
+  }
+
   async updateById(id: string, input: UpdateJobInput): Promise<Job | null> {
     const current = await this.findById(id);
     if (!current) {
@@ -98,6 +124,10 @@ export class DrizzleJobRepository implements JobRepository {
 
     this.db.update(jobs).set(updated).where(eq(jobs.id, id)).run();
     return updated;
+  }
+
+  async deleteByBookId(bookId: string): Promise<void> {
+    this.db.delete(jobs).where(eq(jobs.bookId, bookId)).run();
   }
 }
 
@@ -168,6 +198,10 @@ export class DrizzlePartRepository implements PartRepository {
 
     this.db.update(parts).set(updated).where(eq(parts.id, id)).run();
     return updated;
+  }
+
+  async deleteByBookId(bookId: string): Promise<void> {
+    this.db.delete(parts).where(eq(parts.bookId, bookId)).run();
   }
 }
 
@@ -241,6 +275,14 @@ export class DrizzleChunkRepository implements ChunkRepository {
 
     this.db.update(chunks).set(updated).where(eq(chunks.id, id)).run();
     return updated;
+  }
+
+  async deleteByPartIds(partIds: string[]): Promise<void> {
+    if (partIds.length === 0) {
+      return;
+    }
+
+    this.db.delete(chunks).where(inArray(chunks.partId, partIds)).run();
   }
 }
 

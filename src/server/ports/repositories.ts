@@ -17,6 +17,8 @@ export type CreateBookInput = {
 export interface BookRepository {
   create(input: CreateBookInput): Promise<Book>;
   findById(id: string): Promise<Book | null>;
+  listRecent(limit?: number): Promise<Book[]>;
+  deleteById(id: string): Promise<void>;
 }
 
 export type CreateJobInput = {
@@ -37,7 +39,9 @@ export type UpdateJobInput = {
 export interface JobRepository {
   create(input: CreateJobInput): Promise<Job>;
   findById(id: string): Promise<Job | null>;
+  findLatestByBookId(bookId: string): Promise<Job | null>;
   updateById(id: string, input: UpdateJobInput): Promise<Job | null>;
+  deleteByBookId(bookId: string): Promise<void>;
 }
 
 export type CreatePartInput = {
@@ -60,6 +64,7 @@ export interface PartRepository {
   findById(id: string): Promise<Part | null>;
   listByBookId(bookId: string): Promise<Part[]>;
   updateById(id: string, input: UpdatePartInput): Promise<Part | null>;
+  deleteByBookId(bookId: string): Promise<void>;
 }
 
 export type CreateChunkInput = {
@@ -85,4 +90,5 @@ export interface ChunkRepository {
   listByPartId(partId: string): Promise<Chunk[]>;
   findCompletedByTextHash(textHash: string): Promise<Chunk | null>;
   updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null>;
+  deleteByPartIds(partIds: string[]): Promise<void>;
 }

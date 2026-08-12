@@ -9,7 +9,9 @@ import {
   initializeDatabase,
 } from "@/server/infrastructure/db";
 import { createBookJob } from "@/server/application/createBookJob";
+import { deleteBook } from "@/server/application/deleteBook";
 import { queryJob } from "@/server/application/queryJob";
+import { queryLibrary } from "@/server/application/queryLibrary";
 import { queryPlayer } from "@/server/application/queryPlayer";
 import { retryChunk } from "@/server/application/retryChunk";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
@@ -42,7 +44,10 @@ export function createContainer() {
   return {
     createBookJob: (input: Parameters<typeof createBookJob>[1]) =>
       createBookJob({ books, jobs, storage }, input),
+    deleteBook: (bookId: string) =>
+      deleteBook({ books, chunks, jobs, parts, storage }, bookId),
     queryJob: (jobId: string) => queryJob({ jobs }, jobId),
+    queryLibrary: () => queryLibrary({ books, jobs, parts }),
     queryPlayer: (bookId: string) => queryPlayer({ books, parts }, bookId),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
       retryChunk({ chunks, tts: ttsProvider }, input),

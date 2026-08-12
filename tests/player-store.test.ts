@@ -5,6 +5,7 @@ afterEach(() => {
   usePlayerStore.setState({
     bookId: null,
     partId: null,
+    parts: [],
     isPlaying: false,
   });
 });

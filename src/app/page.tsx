@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HealthStatus } from "@/features/health/health-status";
 
 export default function HomePage() {
@@ -14,6 +15,21 @@ export default function HomePage() {
           <p className="mt-4 max-w-xl text-base leading-7 text-stone-600">
             本地中文文本有声化工具的第一阶段工程入口。
           </p>
+        </div>
+
+        <div className="mb-8 flex flex-wrap gap-3">
+          <Link
+            className="border border-stone-900 bg-stone-900 px-4 py-2 text-sm font-medium text-white"
+            href="/upload"
+          >
+            Upload text
+          </Link>
+          <Link
+            className="border border-stone-300 px-4 py-2 text-sm font-medium text-stone-800"
+            href="/books"
+          >
+            Books
+          </Link>
         </div>
 
         <HealthStatus />

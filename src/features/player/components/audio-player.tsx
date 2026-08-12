@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
+import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { PlayerDto } from "@/shared/schemas/player";
 import { usePlayerStore } from "../player-store";
 
 export function AudioPlayer({ player }: { player: PlayerDto }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const setPartId = usePlayerStore((state) => state.setPartId);
+  const setParts = usePlayerStore((state) => state.setParts);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
+  const goToPrevious = usePlayerStore((state) => state.goToPrevious);
+  const goToNext = usePlayerStore((state) => state.goToNext);
 
   const currentIndex = useMemo(() => {
     const index = player.parts.findIndex((part) => part.id === partId);
@@ -21,104 +24,73 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
   const canGoNext = currentIndex < player.parts.length - 1;
 
   useEffect(() => {
+    setParts(player.parts);
+  }, [player.parts, setParts]);
+
+  useEffect(() => {
     if (currentPart) {
       setPartId(currentPart.id);
     }
   }, [currentPart, setPartId]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentPart) {
-      return;
-    }
-
-    audio.src = currentPart.audioUrl;
-    if (isPlaying) {
-      void audio.play().catch(() => setPlaying(false));
-    }
-  }, [currentPart, isPlaying, setPlaying]);
-
   function togglePlay() {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    if (audio.paused) {
-      void audio.play();
-      setPlaying(true);
-      return;
-    }
-
-    audio.pause();
-    setPlaying(false);
-  }
-
-  function goToPart(nextIndex: number) {
-    const nextPart = player.parts[nextIndex];
-    if (!nextPart) {
-      return;
-    }
-
-    setPartId(nextPart.id);
+    setPlaying(!isPlaying);
   }
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-5" data-testid="audio-player">
       <div className="grid gap-2">
         <p className="text-sm text-stone-500">Current part</p>
-        <h2 className="text-xl font-semibold text-stone-900">
+        <h2 className="text-xl font-semibold text-stone-900" data-testid="current-part-title">
           {currentPart?.title}
         </h2>
       </div>
 
-      <audio
-        ref={audioRef}
-        className="w-full"
-        controls
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          if (canGoNext) {
-            goToPart(currentIndex + 1);
-            return;
-          }
-
-          setPlaying(false);
-        }}
-      />
-
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="border border-stone-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:text-stone-400"
-          onClick={() => goToPart(currentIndex - 1)}
+          data-testid="player-previous"
+          className="flex items-center gap-2 border border-stone-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:text-stone-400"
+          onClick={goToPrevious}
           disabled={!canGoPrevious}
+          aria-label="Previous part"
         >
+          <SkipBack className="h-4 w-4" aria-hidden="true" />
           Previous
         </button>
         <button
           type="button"
-          className="border border-stone-900 bg-stone-900 px-3 py-2 text-sm font-medium text-white"
+          data-testid="player-toggle"
+          className="flex items-center gap-2 border border-stone-900 bg-stone-900 px-3 py-2 text-sm font-medium text-white"
           onClick={togglePlay}
+          aria-label={isPlaying ? "Pause" : "Play"}
         >
+          {isPlaying ? (
+            <Pause className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Play className="h-4 w-4" aria-hidden="true" />
+          )}
           {isPlaying ? "Pause" : "Play"}
         </button>
         <button
           type="button"
-          className="border border-stone-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:text-stone-400"
-          onClick={() => goToPart(currentIndex + 1)}
+          data-testid="player-next"
+          className="flex items-center gap-2 border border-stone-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:text-stone-400"
+          onClick={goToNext}
           disabled={!canGoNext}
+          aria-label="Next part"
         >
+          <SkipForward className="h-4 w-4" aria-hidden="true" />
           Next
         </button>
       </div>
 
-      <ul className="grid gap-2">
+      <ul className="grid gap-2" data-testid="player-part-list">
         {player.parts.map((part) => (
           <li key={part.id}>
             <button
               type="button"
+              data-testid={`player-part-${part.index + 1}`}
               className="w-full border border-stone-200 px-3 py-2 text-left text-sm"
               onClick={() => setPartId(part.id)}
             >

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { MiniPlayer } from "@/features/player/components/mini-player";
+import { PlayerAudioEngine } from "@/features/player/components/player-audio-engine";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <div className="pb-24 sm:pb-0">{children}</div>
+        <PlayerAudioEngine />
+        <MiniPlayer />
+      </body>
     </html>
   );
 }

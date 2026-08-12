@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
@@ -32,6 +32,17 @@ export class LocalStorage implements FileStorage {
     await writeFile(filePath, input.content);
 
     return filePath;
+  }
+
+  async deleteFile(filePath: string): Promise<void> {
+    const root = path.resolve(this.rootDir);
+    const target = path.resolve(filePath);
+
+    if (target === root || !target.startsWith(`${root}${path.sep}`)) {
+      return;
+    }
+
+    await rm(target, { force: true });
   }
 }
 
