@@ -10,6 +10,7 @@ import {
 } from "@/server/infrastructure/db";
 import { createBookJob } from "@/server/application/createBookJob";
 import { queryJob } from "@/server/application/queryJob";
+import { queryPlayer } from "@/server/application/queryPlayer";
 import { retryChunk } from "@/server/application/retryChunk";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
 import { FfmpegAudio } from "@/server/infrastructure/ffmpegAudio";
@@ -42,6 +43,7 @@ export function createContainer() {
     createBookJob: (input: Parameters<typeof createBookJob>[1]) =>
       createBookJob({ books, jobs, storage }, input),
     queryJob: (jobId: string) => queryJob({ jobs }, jobId),
+    queryPlayer: (bookId: string) => queryPlayer({ books, parts }, bookId),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
       retryChunk({ chunks, tts: ttsProvider }, input),
     audioAssembler,

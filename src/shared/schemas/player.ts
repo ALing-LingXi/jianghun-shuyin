@@ -4,7 +4,7 @@ export const playerPartSchema = z.object({
   id: z.string().uuid(),
   index: z.number().int().nonnegative(),
   title: z.string().trim().min(1),
-  audioUrl: z.string().url(),
+  audioUrl: z.string().min(1),
   durationSeconds: z.number().nonnegative(),
 });
 
