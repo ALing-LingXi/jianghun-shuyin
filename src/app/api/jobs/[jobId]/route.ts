@@ -10,6 +10,9 @@ const jobIdSchema = z.object({
 function toJobDto(job: {
   id: string;
   bookId: string;
+  voice: string;
+  rate: string;
+  pitch: string;
   status: string;
   stage: string;
   progress: number;

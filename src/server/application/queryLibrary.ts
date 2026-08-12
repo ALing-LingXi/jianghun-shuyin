@@ -4,6 +4,7 @@ import type {
   JobRepository,
   PartRepository,
 } from "@/server/ports/repositories";
+import type { BookStatus, JobStatus } from "@/shared/types/entities";
 
 export type LibraryBookDto = {
   id: string;
@@ -64,7 +65,7 @@ function toLibraryBook(
     id: book.id,
     title: book.title,
     author: book.author,
-    status: book.status,
+    status: deriveBookStatus(book.status, latestJob?.status),
     createdAt: book.createdAt.toISOString(),
     latestJob: latestJob
       ? {
@@ -81,4 +82,23 @@ function toLibraryBook(
       0,
     ),
   };
+}
+
+function deriveBookStatus(
+  bookStatus: BookStatus,
+  latestJobStatus: JobStatus | undefined,
+): BookStatus {
+  switch (latestJobStatus) {
+    case "queued":
+      return "pending";
+    case "processing":
+      return "processing";
+    case "completed":
+      return "completed";
+    case "failed":
+    case "cancelled":
+      return "failed";
+    default:
+      return bookStatus;
+  }
 }

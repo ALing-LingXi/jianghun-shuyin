@@ -57,6 +57,9 @@ describe("deleteBook", () => {
     });
     await jobs.create({
       bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
       status: "completed",
       stage: "completed",
       progress: 100,

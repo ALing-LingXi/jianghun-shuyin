@@ -6,6 +6,9 @@ function createJob(overrides: Partial<Job> = {}): Job {
   return {
     id: "11111111-1111-4111-8111-111111111111",
     bookId: "22222222-2222-4222-8222-222222222222",
+    voice: "zh-CN-YunxiNeural",
+    rate: "+0%",
+    pitch: "+0Hz",
     status: "queued",
     stage: "decoding",
     progress: 0,

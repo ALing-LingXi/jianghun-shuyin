@@ -1,0 +1,52 @@
+{
+  "decode": {
+    "text": "哈哈哈哈，你不想做凯撒立刻打开拉萨扩大了去啊·",
+    "encoding": "utf-8",
+    "byteLength": 68,
+    "hadBom": false,
+    "warnings": []
+  },
+  "clean": {
+    "text": "哈哈哈哈，你不想做凯撒立刻打开拉萨扩大了去啊·",
+    "originalLength": 23,
+    "cleanedLength": 23,
+    "removedBom": false,
+    "normalizedNewlineCount": 0,
+    "collapsedBlankLineCount": 0,
+    "trimmedBlankLineCount": 0
+  },
+  "chapters": {
+    "chapters": [],
+    "detectedHeadingCount": 0
+  },
+  "plan": {
+    "parts": [
+      {
+        "index": 0,
+        "title": "正文",
+        "text": "哈哈哈哈，你不想做凯撒立刻打开拉萨扩大了去啊·",
+        "chapterIndex": 0,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 23,
+        "estimatedDurationSeconds": 5
+      }
+    ],
+    "fallbackUsed": true,
+    "maxPartCharacters": 3000,
+    "estimatedCharactersPerSecond": 5
+  },
+  "report": {
+    "encoding": "utf-8",
+    "byteLength": 68,
+    "originalCharacters": 23,
+    "cleanedCharacters": 23,
+    "chapterCount": 0,
+    "partCount": 1,
+    "fallbackUsed": true,
+    "estimatedDurationSeconds": 5,
+    "notices": [
+      "fallback_single_chapter"
+    ]
+  }
+}

@@ -1,6 +1,11 @@
 import type { BookRepository, JobRepository } from "@/server/ports/repositories";
 import type { FileStorage } from "@/server/ports/storage";
 import type { UploadTextDto, UploadTextResponseDto } from "@/shared/schemas/upload";
+import {
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_VOICE,
+} from "@/shared/tts";
 
 export type CreateBookJobDeps = {
   books: BookRepository;
@@ -25,6 +30,9 @@ export async function createBookJob(
 
   const job = await deps.jobs.create({
     bookId: book.id,
+    voice: input.voice || DEFAULT_TTS_VOICE,
+    rate: input.rate || DEFAULT_TTS_RATE,
+    pitch: input.pitch || DEFAULT_TTS_PITCH,
     status: "queued",
     stage: "decoding",
     progress: 0,

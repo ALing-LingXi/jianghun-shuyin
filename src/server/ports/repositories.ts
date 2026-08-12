@@ -23,6 +23,9 @@ export interface BookRepository {
 
 export type CreateJobInput = {
   bookId: string;
+  voice: string;
+  rate: string;
+  pitch: string;
   status?: JobStatus;
   stage?: JobStage;
   progress?: number;

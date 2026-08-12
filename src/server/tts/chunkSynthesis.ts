@@ -24,6 +24,8 @@ export type SynthesizePartChunksResult = {
   failedCount: number;
 };
 
+const MAX_TTS_ATTEMPTS = 3;
+
 export async function synthesizePartChunks(
   deps: SynthesizePartChunksDeps,
   input: SynthesizePartChunksInput,
@@ -67,7 +69,7 @@ export async function synthesizePartChunks(
     });
 
     try {
-      const audio = await deps.tts.synthesize({
+      const synthesis = await synthesizeWithRetry(deps.tts, {
         text: plannedChunk.text,
         voice: input.voice,
         rate: input.rate,
@@ -75,8 +77,9 @@ export async function synthesizePartChunks(
         fileName: `${input.partId}-${plannedChunk.index}.mp3`,
       });
       const completed = await deps.chunks.updateById(chunk.id, {
-        audioPath: audio.audioPath,
+        audioPath: synthesis.audio.audioPath,
         status: "completed",
+        retryCount: synthesis.retryCount,
         errorMessage: null,
       });
       createdChunks.push(completed ?? chunk);
@@ -84,6 +87,7 @@ export async function synthesizePartChunks(
       failedCount += 1;
       const failed = await deps.chunks.updateById(chunk.id, {
         status: "failed",
+        retryCount: retryCountFromError(error),
         errorMessage: toErrorMessage(error),
       });
       createdChunks.push(failed ?? chunk);
@@ -97,10 +101,50 @@ export async function synthesizePartChunks(
   };
 }
 
+async function synthesizeWithRetry(
+  tts: TTSProvider,
+  input: Parameters<TTSProvider["synthesize"]>[0],
+): Promise<{
+  audio: Awaited<ReturnType<TTSProvider["synthesize"]>>;
+  retryCount: number;
+}> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < MAX_TTS_ATTEMPTS; attempt += 1) {
+    try {
+      return {
+        audio: await tts.synthesize(input),
+        retryCount: attempt,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new TtsSynthesisAttemptsError(lastError, MAX_TTS_ATTEMPTS - 1);
+}
+
 function toErrorMessage(error: unknown): string {
+  if (error instanceof TtsSynthesisAttemptsError) {
+    return toErrorMessage(error.cause);
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
 
   return "TTS chunk synthesis failed";
+}
+
+function retryCountFromError(error: unknown): number {
+  return error instanceof TtsSynthesisAttemptsError ? error.retryCount : 0;
+}
+
+class TtsSynthesisAttemptsError extends Error {
+  constructor(
+    readonly cause: unknown,
+    readonly retryCount: number,
+  ) {
+    super(toErrorMessage(cause));
+  }
 }

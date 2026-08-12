@@ -14,6 +14,9 @@ export const jobs = sqliteTable("jobs", {
   bookId: text("book_id")
     .notNull()
     .references(() => books.id),
+  voice: text("voice").notNull(),
+  rate: text("rate").notNull(),
+  pitch: text("pitch").notNull(),
   status: text("status").notNull(),
   stage: text("stage").notNull(),
   progress: integer("progress").notNull(),

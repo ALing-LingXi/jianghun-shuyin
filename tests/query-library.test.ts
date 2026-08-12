@@ -33,6 +33,9 @@ describe("queryLibrary", () => {
     });
     await jobs.create({
       bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
       status: "completed",
       stage: "completed",
       progress: 100,
@@ -52,6 +55,7 @@ describe("queryLibrary", () => {
     expect(result.books[0]).toMatchObject({
       id: book.id,
       title: "Test Book",
+      status: "completed",
       latestJob: {
         status: "completed",
         stage: "completed",
@@ -60,6 +64,44 @@ describe("queryLibrary", () => {
       partCount: 1,
       playablePartCount: 1,
       durationSeconds: 30,
+    });
+  });
+
+  it("derives book status from the latest terminal job", async () => {
+    const client = createDatabaseClient(":memory:");
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const parts = new DrizzlePartRepository(client.db);
+
+    const book = await books.create({
+      title: "Failed Book",
+      sourcePath: "storage/sources/failed-book.txt",
+      status: "pending",
+    });
+    await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+      status: "failed",
+      stage: "tts",
+      progress: 90,
+      errorMessage: "TTS failed",
+    });
+
+    const result = await queryLibrary({ books, jobs, parts });
+
+    expect(result.books[0]).toMatchObject({
+      id: book.id,
+      status: "failed",
+      latestJob: {
+        status: "failed",
+        stage: "tts",
+        progress: 90,
+      },
     });
   });
 });

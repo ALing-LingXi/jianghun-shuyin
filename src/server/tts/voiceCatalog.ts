@@ -1,16 +1,20 @@
-export const DEFAULT_TTS_VOICE = "zh-CN-XiaoxiaoNeural";
-export const DEFAULT_TTS_RATE = "+0%";
-export const DEFAULT_TTS_PITCH = "+0Hz";
+import {
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_VOICE,
+} from "@/shared/tts";
+
+export { DEFAULT_TTS_PITCH, DEFAULT_TTS_RATE, DEFAULT_TTS_VOICE };
 
 export const CHINESE_TTS_VOICES = [
   {
     id: DEFAULT_TTS_VOICE,
-    label: "Xiaoxiao",
+    label: "云溪配音",
     locale: "zh-CN",
   },
   {
-    id: "zh-CN-YunxiNeural",
-    label: "Yunxi",
+    id: "zh-CN-XiaoxiaoNeural",
+    label: "Xiaoxiao",
     locale: "zh-CN",
   },
 ] as const;

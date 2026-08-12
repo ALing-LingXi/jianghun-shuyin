@@ -145,6 +145,11 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
         </Link>
         <button
           type="button"
+          aria-label={
+            isConfirmingDelete
+              ? `Confirm deletion of ${book.title}`
+              : `Delete ${book.title}`
+          }
           className={`flex items-center gap-2 border px-3 py-2 text-sm font-medium ${
             isConfirmingDelete
               ? "border-red-700 bg-red-700 text-white"
@@ -163,6 +168,7 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
         {isConfirmingDelete ? (
           <button
             type="button"
+            aria-label={`Cancel deletion of ${book.title}`}
             className="flex items-center gap-2 border border-stone-300 px-3 py-2 text-sm font-medium text-stone-800 disabled:cursor-not-allowed disabled:text-stone-400"
             disabled={isDeleting}
             onClick={() => {

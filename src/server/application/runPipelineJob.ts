@@ -20,7 +20,7 @@ import {
   DEFAULT_TTS_PITCH,
   DEFAULT_TTS_RATE,
   DEFAULT_TTS_VOICE,
-} from "@/server/tts/voiceCatalog";
+} from "@/shared/tts";
 
 export type RunPipelineJobDeps = {
   books: BookRepository;
@@ -240,15 +240,21 @@ async function ttsStage(
       {
         partId: part.id,
         text: plannedPart.text,
-        voice: DEFAULT_TTS_VOICE,
-        rate: DEFAULT_TTS_RATE,
-        pitch: DEFAULT_TTS_PITCH,
+        voice: job.voice || DEFAULT_TTS_VOICE,
+        rate: job.rate || DEFAULT_TTS_RATE,
+        pitch: job.pitch || DEFAULT_TTS_PITCH,
       },
     );
 
     if (result.failedCount > 0) {
       await deps.parts.updateById(part.id, { status: "failed" });
-      throw new Error(`TTS failed for part ${part.index}`);
+      const failedChunk = result.chunks.find(
+        (chunk) => chunk.status === "failed",
+      );
+      throw new Error(
+        failedChunk?.errorMessage ??
+          `TTS failed for part ${part.index}`,
+      );
     }
   }
 

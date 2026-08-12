@@ -59,6 +59,9 @@ describe("createBookJob", () => {
     });
     expect(job).toMatchObject({
       bookId: result.bookId,
+      voice: "zh-CN-XiaoxiaoNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
       status: "queued",
       stage: "decoding",
       progress: 0,

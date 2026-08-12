@@ -224,16 +224,57 @@ describe("synthesizePartChunks", () => {
     );
 
     expect(result.failedCount).toBe(1);
+    expect(tts.synthesize).toHaveBeenCalledTimes(3);
     expect(result.chunks[0]).toMatchObject({
       status: "failed",
-      retryCount: 0,
+      retryCount: 2,
       errorMessage: "fake TTS unavailable",
     });
     await expect(
       context.chunks.findById(result.chunks[0].id),
     ).resolves.toMatchObject({
       status: "failed",
+      retryCount: 2,
       errorMessage: "fake TTS unavailable",
+    });
+  });
+
+  it("retries a transient TTS failure for only the affected chunk", async () => {
+    const context = await createTestContext();
+    const tts = createFakeTts(async (input) => {
+      if (tts.synthesize.mock.calls.length < 3) {
+        throw new Error("No audio was received.");
+      }
+
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    });
+
+    const result = await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "retry this sentence.",
+        voice: "zh-CN-YunxiNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    expect(tts.synthesize).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      failedCount: 0,
+      chunks: [
+        {
+          status: "completed",
+          retryCount: 2,
+        },
+      ],
     });
   });
 });

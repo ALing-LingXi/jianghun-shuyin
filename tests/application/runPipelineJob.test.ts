@@ -1,7 +1,7 @@
 import { readdir, readFile, rm, unlink, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioAssembler } from "../../src/server/ports/audio";
 import type { TTSProvider } from "../../src/server/ports/tts";
 import { createBookJob } from "../../src/server/application/createBookJob";
@@ -174,6 +174,59 @@ describe("runPipelineJob", () => {
     });
     const partRows = context.client.db.select().from(partsTable).all();
     expect(partRows.some((part) => part.status === "failed")).toBe(true);
+  });
+
+  it("keeps the failed chunk's TTS error on the job", async () => {
+    const context = await createTestContext();
+    context.tts = {
+      synthesize: async () => {
+        throw new Error("No audio was received.");
+      },
+    };
+    const result = await createQueuedJob(context);
+
+    for (let step = 0; step < 6; step += 1) {
+      await runPipelineJob(context, result.jobId);
+    }
+
+    await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
+      status: "failed",
+      stage: "tts",
+      progress: 90,
+      errorMessage: "No audio was received.",
+    });
+  });
+
+  it("uses the voice selected when the job was created", async () => {
+    const context = await createTestContext();
+    const synthesize = vi.fn(createFakeTts().synthesize);
+    context.tts = { synthesize };
+    const result = await createBookJob(
+      {
+        books: context.books,
+        jobs: context.jobs,
+        storage: context.storage,
+      },
+      {
+        title: "Voice test",
+        text: "Chapter 1: Wind\nRain fell on the street.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+10%",
+        pitch: "+5Hz",
+      },
+    );
+
+    for (let step = 0; step < 6; step += 1) {
+      await runPipelineJob(context, result.jobId);
+    }
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+10%",
+        pitch: "+5Hz",
+      }),
+    );
   });
 });
 

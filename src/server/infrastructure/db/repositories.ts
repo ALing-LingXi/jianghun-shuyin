@@ -74,6 +74,9 @@ export class DrizzleJobRepository implements JobRepository {
     const job: Job = {
       id: randomUUID(),
       bookId: input.bookId,
+      voice: input.voice,
+      rate: input.rate,
+      pitch: input.pitch,
       status: input.status ?? "queued",
       stage: input.stage ?? "decoding",
       progress: input.progress ?? 0,

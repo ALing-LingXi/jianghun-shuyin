@@ -27,7 +27,12 @@ describe("queryJob", () => {
       title: "三体",
       sourcePath: "storage/sources/three-body.txt",
     });
-    const created = await jobs.create({ bookId: book.id });
+    const created = await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+    });
 
     await expect(queryJob({ jobs }, created.id)).resolves.toEqual(created);
   });

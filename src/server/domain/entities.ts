@@ -18,6 +18,9 @@ export type Book = {
 export type Job = {
   id: string;
   bookId: string;
+  voice: string;
+  rate: string;
+  pitch: string;
   status: JobStatus;
   stage: JobStage;
   progress: number;

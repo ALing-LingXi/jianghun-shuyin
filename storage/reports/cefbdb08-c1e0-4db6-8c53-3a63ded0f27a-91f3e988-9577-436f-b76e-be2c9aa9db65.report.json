@@ -1,0 +1,52 @@
+{
+  "decode": {
+    "text": "我们吉恩哈就开始决定把就看不到卡巴四大皆空",
+    "encoding": "utf-8",
+    "byteLength": 63,
+    "hadBom": false,
+    "warnings": []
+  },
+  "clean": {
+    "text": "我们吉恩哈就开始决定把就看不到卡巴四大皆空",
+    "originalLength": 21,
+    "cleanedLength": 21,
+    "removedBom": false,
+    "normalizedNewlineCount": 0,
+    "collapsedBlankLineCount": 0,
+    "trimmedBlankLineCount": 0
+  },
+  "chapters": {
+    "chapters": [],
+    "detectedHeadingCount": 0
+  },
+  "plan": {
+    "parts": [
+      {
+        "index": 0,
+        "title": "正文",
+        "text": "我们吉恩哈就开始决定把就看不到卡巴四大皆空",
+        "chapterIndex": 0,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 21,
+        "estimatedDurationSeconds": 5
+      }
+    ],
+    "fallbackUsed": true,
+    "maxPartCharacters": 3000,
+    "estimatedCharactersPerSecond": 5
+  },
+  "report": {
+    "encoding": "utf-8",
+    "byteLength": 63,
+    "originalCharacters": 21,
+    "cleanedCharacters": 21,
+    "chapterCount": 0,
+    "partCount": 1,
+    "fallbackUsed": true,
+    "estimatedDurationSeconds": 5,
+    "notices": [
+      "fallback_single_chapter"
+    ]
+  }
+}

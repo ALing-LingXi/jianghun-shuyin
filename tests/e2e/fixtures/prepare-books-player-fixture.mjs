@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS books (
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY NOT NULL,
   book_id TEXT NOT NULL REFERENCES books(id),
+  voice TEXT NOT NULL,
+  rate TEXT NOT NULL,
+  pitch TEXT NOT NULL,
   status TEXT NOT NULL,
   stage TEXT NOT NULL,
   progress INTEGER NOT NULL,
@@ -67,8 +70,20 @@ const transaction = db.transaction(() => {
   ).run(bookId, "Test Book", "Lin", sourcePath, "completed", createdAt);
 
   db.prepare(
-    "INSERT INTO jobs (id, book_id, status, stage, progress, error_message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-  ).run(jobId, bookId, "completed", "completed", 100, null, createdAt, createdAt);
+    "INSERT INTO jobs (id, book_id, voice, rate, pitch, status, stage, progress, error_message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(
+    jobId,
+    bookId,
+    "zh-CN-YunxiNeural",
+    "+0%",
+    "+0Hz",
+    "completed",
+    "completed",
+    100,
+    null,
+    createdAt,
+    createdAt,
+  );
 
   db.prepare(
     "INSERT INTO parts (id, book_id, part_index, title, audio_path, duration_seconds, status) VALUES (?, ?, ?, ?, ?, ?, ?)",

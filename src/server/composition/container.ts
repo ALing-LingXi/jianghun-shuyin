@@ -15,6 +15,7 @@ import { queryLibrary } from "@/server/application/queryLibrary";
 import { queryPlayer } from "@/server/application/queryPlayer";
 import { retryChunk } from "@/server/application/retryChunk";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
+import { EdgeTtsVoiceCatalog } from "@/server/infrastructure/edgeTtsVoiceCatalog";
 import { FfmpegAudio } from "@/server/infrastructure/ffmpegAudio";
 import { LocalStorage } from "@/server/infrastructure/localStorage";
 
@@ -37,6 +38,7 @@ export function createContainer() {
   const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(defaultStorageRoot);
   const ttsProvider = new EdgeTtsProvider({ storage });
+  const voiceCatalog = new EdgeTtsVoiceCatalog();
   const audioAssembler = new FfmpegAudio({
     outputDir: path.join(defaultStorageRoot, "parts"),
   });
@@ -54,5 +56,6 @@ export function createContainer() {
     audioAssembler,
     parts,
     ttsProvider,
+    voiceCatalog,
   };
 }

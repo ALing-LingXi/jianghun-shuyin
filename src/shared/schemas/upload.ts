@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { ttsVoiceIdSchema } from "./tts";
+import {
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_VOICE,
+} from "@/shared/tts";
 
 const textSchema = z
   .string()
@@ -12,9 +18,9 @@ const uploadFieldsSchema = z.object({
   author: z.string().trim().min(1).max(120).optional(),
   text: textSchema.optional(),
   fileName: z.string().trim().min(1).max(255).optional(),
-  voice: z.string().trim().min(1).max(100),
-  rate: z.string().trim().regex(/^[+-]\d+%$/),
-  pitch: z.string().trim().regex(/^[+-]\d+Hz$/),
+  voice: ttsVoiceIdSchema.default(DEFAULT_TTS_VOICE),
+  rate: z.string().trim().regex(/^[+-]\d+%$/).default(DEFAULT_TTS_RATE),
+  pitch: z.string().trim().regex(/^[+-]\d+Hz$/).default(DEFAULT_TTS_PITCH),
 });
 
 export const uploadSchema = uploadFieldsSchema

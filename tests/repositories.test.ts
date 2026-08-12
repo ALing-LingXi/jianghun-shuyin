@@ -47,10 +47,18 @@ describe("Drizzle repositories", () => {
       sourcePath: "storage/sources/three-body.txt",
     });
 
-    const created = await jobs.create({ bookId: book.id });
+    const created = await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+    });
 
     expect(created).toMatchObject({
       bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
       status: "queued",
       stage: "decoding",
       progress: 0,

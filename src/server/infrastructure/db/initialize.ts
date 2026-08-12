@@ -1,5 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { AppDatabase } from "./client";
+import {
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_VOICE,
+} from "@/server/tts/voiceCatalog";
 
 export function initializeDatabase(db: AppDatabase): void {
   db.run(sql`
@@ -17,6 +22,9 @@ export function initializeDatabase(db: AppDatabase): void {
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY NOT NULL,
       book_id TEXT NOT NULL REFERENCES books(id),
+      voice TEXT NOT NULL,
+      rate TEXT NOT NULL,
+      pitch TEXT NOT NULL,
       status TEXT NOT NULL,
       stage TEXT NOT NULL,
       progress INTEGER NOT NULL,
@@ -25,6 +33,8 @@ export function initializeDatabase(db: AppDatabase): void {
       updated_at INTEGER NOT NULL
     )
   `);
+
+  ensureJobTtsColumns(db);
 
   db.run(sql`
     CREATE TABLE IF NOT EXISTS parts (
@@ -50,4 +60,33 @@ export function initializeDatabase(db: AppDatabase): void {
       error_message TEXT
     )
   `);
+}
+
+function ensureJobTtsColumns(db: AppDatabase): void {
+  const jobColumns = db.all<{ name: string }>(sql`PRAGMA table_info(jobs)`);
+  const columnNames = new Set(jobColumns.map((column) => column.name));
+
+  if (!columnNames.has("voice")) {
+    db.run(
+      sql.raw(
+        `ALTER TABLE jobs ADD COLUMN voice TEXT NOT NULL DEFAULT '${DEFAULT_TTS_VOICE}'`,
+      ),
+    );
+  }
+
+  if (!columnNames.has("rate")) {
+    db.run(
+      sql.raw(
+        `ALTER TABLE jobs ADD COLUMN rate TEXT NOT NULL DEFAULT '${DEFAULT_TTS_RATE}'`,
+      ),
+    );
+  }
+
+  if (!columnNames.has("pitch")) {
+    db.run(
+      sql.raw(
+        `ALTER TABLE jobs ADD COLUMN pitch TEXT NOT NULL DEFAULT '${DEFAULT_TTS_PITCH}'`,
+      ),
+    );
+  }
 }

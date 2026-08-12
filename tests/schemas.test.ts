@@ -29,6 +29,9 @@ describe("shared schemas", () => {
       jobSchema.parse({
         id: jobId,
         bookId,
+        voice: "zh-CN-YunxiNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
         status: "queued",
         stage: "decoding",
         progress: 0,

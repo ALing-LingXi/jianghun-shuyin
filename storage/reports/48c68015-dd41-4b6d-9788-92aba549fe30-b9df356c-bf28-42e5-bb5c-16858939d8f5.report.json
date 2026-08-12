@@ -1,0 +1,52 @@
+{
+  "decode": {
+    "text": "hhhh哈哈哈哈，我付款，你干什么撒啊是大为·\n",
+    "encoding": "utf-8",
+    "byteLength": 61,
+    "hadBom": false,
+    "warnings": []
+  },
+  "clean": {
+    "text": "hhhh哈哈哈哈，我付款，你干什么撒啊是大为·",
+    "originalLength": 24,
+    "cleanedLength": 23,
+    "removedBom": false,
+    "normalizedNewlineCount": 0,
+    "collapsedBlankLineCount": 0,
+    "trimmedBlankLineCount": 1
+  },
+  "chapters": {
+    "chapters": [],
+    "detectedHeadingCount": 0
+  },
+  "plan": {
+    "parts": [
+      {
+        "index": 0,
+        "title": "正文",
+        "text": "hhhh哈哈哈哈，我付款，你干什么撒啊是大为·",
+        "chapterIndex": 0,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 23,
+        "estimatedDurationSeconds": 5
+      }
+    ],
+    "fallbackUsed": true,
+    "maxPartCharacters": 3000,
+    "estimatedCharactersPerSecond": 5
+  },
+  "report": {
+    "encoding": "utf-8",
+    "byteLength": 61,
+    "originalCharacters": 24,
+    "cleanedCharacters": 23,
+    "chapterCount": 0,
+    "partCount": 1,
+    "fallbackUsed": true,
+    "estimatedDurationSeconds": 5,
+    "notices": [
+      "fallback_single_chapter"
+    ]
+  }
+}
