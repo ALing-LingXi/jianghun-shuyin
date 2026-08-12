@@ -82,9 +82,7 @@ describe("runPipelineJob", () => {
     const context = await createTestContext();
     const result = await createQueuedJob(context);
 
-    for (let step = 0; step < 7; step += 1) {
-      await runPipelineJob(context, result.jobId);
-    }
+    await runUntilTerminal(context, result.jobId);
 
     await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
       status: "completed",
@@ -153,7 +151,7 @@ describe("runPipelineJob", () => {
     expect(failedJob?.errorMessage).toBeTruthy();
   });
 
-  it("marks jobs as failed when part assembly fails", async () => {
+  it("marks parts as failed when part assembly fails and keeps later chapters running", async () => {
     const context = await createTestContext();
     context.audio = createFakeAudio({
       assemblePart: async () => {
@@ -162,39 +160,49 @@ describe("runPipelineJob", () => {
     });
     const result = await createQueuedJob(context);
 
-    for (let step = 0; step < 7; step += 1) {
-      await runPipelineJob(context, result.jobId);
-    }
+    await runUntilTerminal(context, result.jobId);
 
     await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
-      status: "failed",
-      stage: "assembling",
-      progress: 95,
-      errorMessage: "ffmpeg concat failed",
+      status: "completed_with_errors",
+      stage: "completed",
+      progress: 100,
     });
     const partRows = context.client.db.select().from(partsTable).all();
-    expect(partRows.some((part) => part.status === "failed")).toBe(true);
+    expect(partRows.every((part) => part.status === "failed")).toBe(true);
   });
 
-  it("keeps the failed chunk's TTS error on the job", async () => {
+  it("keeps a failed TTS chapter unavailable and continues later chapters", async () => {
     const context = await createTestContext();
+    let attempts = 0;
     context.tts = {
       synthesize: async () => {
-        throw new Error("No audio was received.");
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("TTS text cannot be empty");
+        }
+
+        return {
+          audioPath: `storage/chunks/success-${attempts}.mp3`,
+          byteLength: 4,
+          voice: "zh-CN-XiaoxiaoNeural",
+          rate: "+0%",
+          pitch: "+0Hz",
+        };
       },
     };
     const result = await createQueuedJob(context);
 
-    for (let step = 0; step < 6; step += 1) {
-      await runPipelineJob(context, result.jobId);
-    }
+    await runUntilTerminal(context, result.jobId);
 
     await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
-      status: "failed",
-      stage: "tts",
-      progress: 90,
-      errorMessage: "No audio was received.",
+      status: "completed_with_errors",
+      stage: "completed",
+      progress: 100,
     });
+    const partRows = context.client.db.select().from(partsTable).all();
+    expect(partRows.map((part) => part.status)).toEqual(["failed", "completed"]);
+    expect(partRows[0].audioPath).toBeNull();
+    expect(partRows[1].audioPath).toContain("storage/parts");
   });
 
   it("uses the voice selected when the job was created", async () => {
@@ -216,9 +224,7 @@ describe("runPipelineJob", () => {
       },
     );
 
-    for (let step = 0; step < 6; step += 1) {
-      await runPipelineJob(context, result.jobId);
-    }
+    await runUntilTerminal(context, result.jobId);
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -229,6 +235,26 @@ describe("runPipelineJob", () => {
     );
   });
 });
+
+async function runUntilTerminal(
+  context: Awaited<ReturnType<typeof createTestContext>>,
+  jobId: string,
+) {
+  for (let step = 0; step < 20; step += 1) {
+    await runPipelineJob(context, jobId);
+    const job = await context.jobs.findById(jobId);
+    if (
+      job?.status === "completed" ||
+      job?.status === "completed_with_errors" ||
+      job?.status === "failed" ||
+      job?.status === "cancelled"
+    ) {
+      return;
+    }
+  }
+
+  throw new Error("Job did not reach a terminal state");
+}
 
 function createFakeTts(): TTSProvider {
   return {

@@ -3,6 +3,7 @@ import { queryPlayer } from "../src/server/application/queryPlayer";
 import {
   createDatabaseClient,
   DrizzleBookRepository,
+  DrizzleChunkRepository,
   DrizzlePartRepository,
   initializeDatabase,
 } from "../src/server/infrastructure/db";
@@ -16,21 +17,22 @@ afterEach(() => {
 });
 
 describe("queryPlayer", () => {
-  it("returns playable completed parts in order", async () => {
+  it("returns all parts in order with playable urls only for completed audio", async () => {
     const client = createDatabaseClient(":memory:");
     initializeDatabase(client.db);
     clients.push(client);
 
     const books = new DrizzleBookRepository(client.db);
     const parts = new DrizzlePartRepository(client.db);
+    const chunks = new DrizzleChunkRepository(client.db);
     const book = await books.create({
-      title: "测试书",
+      title: "Test Book",
       sourcePath: "storage/sources/book.txt",
     });
     await parts.create({
       bookId: book.id,
       index: 1,
-      title: "第二段",
+      title: "Chapter 2",
       audioPath: "storage/parts/part-2.mp3",
       durationSeconds: 20,
       status: "completed",
@@ -38,7 +40,7 @@ describe("queryPlayer", () => {
     await parts.create({
       bookId: book.id,
       index: 0,
-      title: "第一段",
+      title: "Chapter 1",
       audioPath: "storage/parts/part-1.mp3",
       durationSeconds: 10,
       status: "completed",
@@ -46,25 +48,59 @@ describe("queryPlayer", () => {
     await parts.create({
       bookId: book.id,
       index: 2,
-      title: "未完成段",
+      title: "Chapter 3",
       audioPath: null,
       status: "pending",
     });
+    const failedPart = await parts.create({
+      bookId: book.id,
+      index: 3,
+      title: "Chapter 4",
+      audioPath: null,
+      status: "failed",
+    });
+    await chunks.create({
+      partId: failedPart.id,
+      index: 0,
+      textHash: "failed-hash",
+      status: "failed",
+      errorMessage: "No audio was received.",
+    });
 
-    const result = await queryPlayer({ books, parts }, book.id);
+    const result = await queryPlayer({ books, parts, chunks }, book.id);
 
     expect(result).toMatchObject({
       bookId: book.id,
       parts: [
         {
           index: 0,
-          title: "第一段",
+          title: "Chapter 1",
+          status: "completed",
+          audioUrl: expect.any(String),
           durationSeconds: 10,
+          errorMessage: null,
         },
         {
           index: 1,
-          title: "第二段",
+          title: "Chapter 2",
+          status: "completed",
+          audioUrl: expect.any(String),
           durationSeconds: 20,
+          errorMessage: null,
+        },
+        {
+          index: 2,
+          title: "Chapter 3",
+          status: "pending",
+          audioUrl: null,
+          errorMessage: null,
+        },
+        {
+          index: 3,
+          title: "Chapter 4",
+          status: "failed",
+          audioUrl: null,
+          errorMessage: "No audio was received.",
         },
       ],
     });

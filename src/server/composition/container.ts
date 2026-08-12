@@ -14,6 +14,7 @@ import { queryJob } from "@/server/application/queryJob";
 import { queryLibrary } from "@/server/application/queryLibrary";
 import { queryPlayer } from "@/server/application/queryPlayer";
 import { retryChunk } from "@/server/application/retryChunk";
+import { retryPart } from "@/server/application/retryPart";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
 import { EdgeTtsVoiceCatalog } from "@/server/infrastructure/edgeTtsVoiceCatalog";
 import { FfmpegAudio } from "@/server/infrastructure/ffmpegAudio";
@@ -50,9 +51,12 @@ export function createContainer() {
       deleteBook({ books, chunks, jobs, parts, storage }, bookId),
     queryJob: (jobId: string) => queryJob({ jobs }, jobId),
     queryLibrary: () => queryLibrary({ books, jobs, parts }),
-    queryPlayer: (bookId: string) => queryPlayer({ books, parts }, bookId),
+    queryPlayer: (bookId: string) =>
+      queryPlayer({ books, parts, chunks }, bookId),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
       retryChunk({ chunks, tts: ttsProvider }, input),
+    retryPart: (input: Parameters<typeof retryPart>[1]) =>
+      retryPart({ chunks, jobs, parts, storage }, input),
     audioAssembler,
     parts,
     ttsProvider,

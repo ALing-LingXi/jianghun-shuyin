@@ -104,4 +104,48 @@ describe("queryLibrary", () => {
       },
     });
   });
+
+  it("treats completed_with_errors as a playable completed library item", async () => {
+    const client = createDatabaseClient(":memory:");
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const parts = new DrizzlePartRepository(client.db);
+    const book = await books.create({
+      title: "Partial Book",
+      sourcePath: "storage/sources/partial-book.txt",
+      status: "pending",
+    });
+    await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+      status: "completed_with_errors",
+      stage: "completed",
+      progress: 100,
+      errorMessage: "1 chapter(s) failed.",
+    });
+    await parts.create({
+      bookId: book.id,
+      index: 0,
+      title: "Chapter 1",
+      audioPath: "storage/parts/part-1.mp3",
+      durationSeconds: 30,
+      status: "completed",
+    });
+
+    const result = await queryLibrary({ books, jobs, parts });
+
+    expect(result.books[0]).toMatchObject({
+      id: book.id,
+      status: "completed",
+      latestJob: {
+        status: "completed_with_errors",
+      },
+      playablePartCount: 1,
+    });
+  });
 });

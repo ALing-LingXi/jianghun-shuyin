@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 export const ttsVoiceIdSchema = z.string().trim().min(1).max(100);
+export const chineseTtsVoiceIdSchema = ttsVoiceIdSchema.refine(
+  (value) => value.startsWith("zh-"),
+  {
+    message: "voice must be a Chinese Edge TTS voice",
+  },
+);
 
 export const ttsVoiceSchema = z.object({
   id: ttsVoiceIdSchema,

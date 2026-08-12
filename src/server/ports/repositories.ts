@@ -93,5 +93,6 @@ export interface ChunkRepository {
   listByPartId(partId: string): Promise<Chunk[]>;
   findCompletedByTextHash(textHash: string): Promise<Chunk | null>;
   updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null>;
+  deleteByPartId(partId: string): Promise<void>;
   deleteByPartIds(partIds: string[]): Promise<void>;
 }

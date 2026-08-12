@@ -2,6 +2,7 @@
 
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useMemo } from "react";
+import type { PlayerPartDto } from "@/shared/schemas/player";
 import { usePlayerStore } from "../player-store";
 
 export function MiniPlayer() {
@@ -11,14 +12,15 @@ export function MiniPlayer() {
   const setPlaying = usePlayerStore((state) => state.setPlaying);
   const goToPrevious = usePlayerStore((state) => state.goToPrevious);
   const goToNext = usePlayerStore((state) => state.goToNext);
+  const playableParts = useMemo(() => parts.filter(isPlayablePart), [parts]);
 
   const currentIndex = useMemo(() => {
-    const index = parts.findIndex((part) => part.id === partId);
+    const index = playableParts.findIndex((part) => part.id === partId);
     return index >= 0 ? index : 0;
-  }, [partId, parts]);
-  const currentPart = parts[currentIndex];
+  }, [partId, playableParts]);
+  const currentPart = playableParts[currentIndex];
   const canGoPrevious = currentIndex > 0;
-  const canGoNext = currentIndex < parts.length - 1;
+  const canGoNext = currentIndex < playableParts.length - 1;
 
   if (!currentPart) {
     return null;
@@ -41,7 +43,7 @@ export function MiniPlayer() {
           >
             {currentPart.title}
           </p>
-          <p className="text-xs text-stone-500">Part {currentPart.index + 1}</p>
+          <p className="text-xs text-stone-500">Chapter {currentPart.index + 1}</p>
         </div>
         <button
           type="button"
@@ -79,4 +81,8 @@ export function MiniPlayer() {
       </div>
     </div>
   );
+}
+
+function isPlayablePart(part: PlayerPartDto): boolean {
+  return part.status === "completed" && Boolean(part.audioUrl);
 }

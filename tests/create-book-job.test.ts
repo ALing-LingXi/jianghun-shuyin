@@ -70,4 +70,45 @@ describe("createBookJob", () => {
       "\n这是正文。\n",
     );
   });
+
+  it("stores uploaded TXT bytes without decoding them", async () => {
+    const client = createDatabaseClient(":memory:");
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const storageRoot = await mkdtemp(path.join(os.tmpdir(), "jianghun-shuyin-"));
+    tempRoots.push(storageRoot);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const storage = new LocalStorage(storageRoot);
+    const source = new Uint8Array([0xff, 0xfe, 0x81, 0x40, 0x0a]);
+
+    const result = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Binary source",
+        author: "Lin",
+        fileName: "novel.txt",
+        source,
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    const book = await books.findById(result.bookId);
+
+    expect(book).toMatchObject({
+      title: "Binary source",
+      author: "Lin",
+      sourcePath: expect.stringMatching(/novel\.txt$/),
+    });
+    await expect(readFile(book!.sourcePath)).resolves.toEqual(Buffer.from(source));
+    await expect(jobs.findById(result.jobId)).resolves.toMatchObject({
+      status: "queued",
+      stage: "decoding",
+      progress: 0,
+    });
+  });
 });

@@ -94,6 +94,7 @@ function deriveBookStatus(
     case "processing":
       return "processing";
     case "completed":
+    case "completed_with_errors":
       return "completed";
     case "failed":
     case "cancelled":

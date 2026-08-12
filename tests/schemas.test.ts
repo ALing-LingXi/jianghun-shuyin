@@ -4,6 +4,7 @@ import {
   createJobSchema,
   jobSchema,
   playerSchema,
+  uploadFileSchema,
   uploadTextSchema,
   uploadSchema,
 } from "../src/shared/schemas";
@@ -17,13 +18,13 @@ describe("shared schemas", () => {
     expect(
       bookSchema.parse({
         id: bookId,
-        title: "三体",
-        author: "刘慈欣",
-        sourcePath: "storage/sources/three-body.txt",
+        title: "Test Book",
+        author: "Lin",
+        sourcePath: "storage/sources/book.txt",
         status: "pending",
         createdAt,
       }),
-    ).toMatchObject({ id: bookId, title: "三体" });
+    ).toMatchObject({ id: bookId, title: "Test Book" });
 
     expect(
       jobSchema.parse({
@@ -32,14 +33,14 @@ describe("shared schemas", () => {
         voice: "zh-CN-YunxiNeural",
         rate: "+0%",
         pitch: "+0Hz",
-        status: "queued",
-        stage: "decoding",
-        progress: 0,
-        errorMessage: null,
+        status: "completed_with_errors",
+        stage: "completed",
+        progress: 100,
+        errorMessage: "1 chapter(s) failed.",
         createdAt,
         updatedAt: createdAt,
       }),
-    ).toMatchObject({ id: jobId, status: "queued" });
+    ).toMatchObject({ id: jobId, status: "completed_with_errors" });
   });
 
   it("rejects invalid job progress and missing upload content", () => {
@@ -52,7 +53,7 @@ describe("shared schemas", () => {
 
     expect(() =>
       uploadSchema.parse({
-        title: "三体",
+        title: "Test Book",
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",
@@ -63,18 +64,63 @@ describe("shared schemas", () => {
   it("accepts text upload input and rejects blank text", () => {
     expect(
       uploadTextSchema.parse({
-        title: "三体",
-        text: "这是正文。",
+        title: "Test Book",
+        text: "This is body text.",
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",
       }),
-    ).toMatchObject({ title: "三体", text: "这是正文。" });
+    ).toMatchObject({ title: "Test Book", text: "This is body text." });
 
     expect(() =>
       uploadTextSchema.parse({
-        title: "三体",
+        title: "Test Book",
         text: "   ",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      uploadTextSchema.parse({
+        title: "Test Book",
+        text: "This is body text.",
+        voice: "am-ET-AmehaNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts TXT upload metadata and rejects invalid files", () => {
+    expect(
+      uploadFileSchema.parse({
+        title: "Test Book",
+        fileName: "test-book.txt",
+        fileSize: 1024,
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toMatchObject({ fileName: "test-book.txt" });
+
+    expect(() =>
+      uploadFileSchema.parse({
+        title: "Test Book",
+        fileName: "test-book.epub",
+        fileSize: 1024,
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      uploadFileSchema.parse({
+        title: "Test Book",
+        fileName: "too-large.txt",
+        fileSize: 20 * 1024 * 1024 + 1,
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",
@@ -82,7 +128,7 @@ describe("shared schemas", () => {
     ).toThrow();
   });
 
-  it("accepts a player with playable parts", () => {
+  it("accepts a player with completed, generating, and failed parts", () => {
     expect(
       playerSchema.parse({
         bookId,
@@ -90,9 +136,29 @@ describe("shared schemas", () => {
           {
             id: "c53a96af-2a92-4fc0-8989-9d1fa1f9f3bd",
             index: 0,
-            title: "第一章",
+            title: "Chapter 1",
+            status: "completed",
             audioUrl: "http://localhost:3000/audio/part-1.mp3",
             durationSeconds: 62,
+            errorMessage: null,
+          },
+          {
+            id: "f34a96af-2a92-4fc0-8989-9d1fa1f9f3bd",
+            index: 1,
+            title: "Chapter 2",
+            status: "tts",
+            audioUrl: null,
+            durationSeconds: null,
+            errorMessage: null,
+          },
+          {
+            id: "ba4a96af-2a92-4fc0-8989-9d1fa1f9f3bd",
+            index: 2,
+            title: "Chapter 3",
+            status: "failed",
+            audioUrl: null,
+            durationSeconds: null,
+            errorMessage: "No audio was received.",
           },
         ],
       }),

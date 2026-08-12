@@ -1,0 +1,52 @@
+{
+  "decode": {
+    "text": "基金设计那边的就看大家按等级Klan凯瑟琳德纳看见没",
+    "encoding": "utf-8",
+    "byteLength": 70,
+    "hadBom": false,
+    "warnings": []
+  },
+  "clean": {
+    "text": "基金设计那边的就看大家按等级Klan凯瑟琳德纳看见没",
+    "originalLength": 26,
+    "cleanedLength": 26,
+    "removedBom": false,
+    "normalizedNewlineCount": 0,
+    "collapsedBlankLineCount": 0,
+    "trimmedBlankLineCount": 0
+  },
+  "chapters": {
+    "chapters": [],
+    "detectedHeadingCount": 0
+  },
+  "plan": {
+    "parts": [
+      {
+        "index": 0,
+        "title": "正文",
+        "text": "基金设计那边的就看大家按等级Klan凯瑟琳德纳看见没",
+        "chapterIndex": 0,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 26,
+        "estimatedDurationSeconds": 6
+      }
+    ],
+    "fallbackUsed": true,
+    "maxPartCharacters": 3000,
+    "estimatedCharactersPerSecond": 5
+  },
+  "report": {
+    "encoding": "utf-8",
+    "byteLength": 70,
+    "originalCharacters": 26,
+    "cleanedCharacters": 26,
+    "chapterCount": 0,
+    "partCount": 1,
+    "fallbackUsed": true,
+    "estimatedDurationSeconds": 6,
+    "notices": [
+      "fallback_single_chapter"
+    ]
+  }
+}

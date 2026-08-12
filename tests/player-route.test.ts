@@ -43,9 +43,11 @@ function createPlayer(overrides: Partial<PlayerDto> = {}): PlayerDto {
       {
         id: partId,
         index: 0,
-        title: "第一段",
+        title: "Chapter 1",
+        status: "completed",
         audioUrl: `/api/player/books/${bookId}?partId=${partId}`,
         durationSeconds: 12,
+        errorMessage: null,
       },
     ],
     ...overrides,
@@ -57,7 +59,7 @@ function createPart(overrides: Partial<Part> = {}): Part {
     id: partId,
     bookId,
     index: 0,
-    title: "第一段",
+    title: "Chapter 1",
     audioPath: "storage/parts/part.mp3",
     durationSeconds: 12,
     status: "completed",
@@ -79,11 +81,17 @@ describe("GET /api/player/books/[bookId]", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       bookId,
-      parts: [{ id: partId, audioUrl: `/api/player/books/${bookId}?partId=${partId}` }],
+      parts: [
+        {
+          id: partId,
+          status: "completed",
+          audioUrl: `/api/player/books/${bookId}?partId=${partId}`,
+        },
+      ],
     });
   });
 
-  it("returns audio bytes for a part", async () => {
+  it("returns audio bytes for a completed part", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "jianghun-player-"));
     tempRoots.push(root);
     const audioPath = path.join(root, "part.mp3");
@@ -100,6 +108,24 @@ describe("GET /api/player/books/[bookId]", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("audio/mpeg");
     await expect(response.arrayBuffer()).resolves.toHaveProperty("byteLength", 3);
+  });
+
+  it("does not return audio for failed parts", async () => {
+    findPartById.mockResolvedValueOnce(
+      createPart({ status: "failed", audioPath: "storage/parts/stale.mp3" }),
+    );
+
+    const response = await GET(
+      new Request(`http://localhost/api/player/books/${bookId}?partId=${partId}`),
+      {
+        params: Promise.resolve({ bookId }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "PART_NOT_FOUND" },
+    });
   });
 
   it("returns 404 when a player is missing", async () => {

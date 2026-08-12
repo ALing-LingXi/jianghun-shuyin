@@ -280,6 +280,10 @@ export class DrizzleChunkRepository implements ChunkRepository {
     return updated;
   }
 
+  async deleteByPartId(partId: string): Promise<void> {
+    this.db.delete(chunks).where(eq(chunks.partId, partId)).run();
+  }
+
   async deleteByPartIds(partIds: string[]): Promise<void> {
     if (partIds.length === 0) {
       return;

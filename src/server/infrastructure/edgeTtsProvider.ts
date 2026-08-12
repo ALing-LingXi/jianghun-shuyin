@@ -57,7 +57,18 @@ export class EdgeTtsProvider implements TTSProvider {
         await synthesizeSpeech({ text, voice, rate, pitch }),
       );
     } catch (error) {
-      throw new Error(`TTS synthesis failed: ${toMessage(error)}`);
+      const diagnostic = {
+        provider: "edge-tts-universal",
+        errorName: errorName(error),
+        message: toMessage(error),
+        textCharacters: text.length,
+        textPreview: previewText(text),
+        voice,
+        rate,
+        pitch,
+      };
+      console.error("[tts] provider synthesis failed", diagnostic);
+      throw new Error(formatProviderDiagnostic(diagnostic));
     }
 
     if (audioBytes.byteLength === 0) {
@@ -121,10 +132,46 @@ async function loadUniversalEdgeTts(): Promise<{
 
 function toMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.message;
+    return error.name === "Error"
+      ? error.message
+      : `${error.name}: ${error.message}`;
   }
 
   return "Unknown TTS error";
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
+function previewText(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 120
+    ? `${normalized.slice(0, 120)}...`
+    : normalized;
+}
+
+function formatProviderDiagnostic(diagnostic: {
+  provider: string;
+  errorName: string;
+  message: string;
+  textCharacters: number;
+  textPreview: string;
+  voice: string;
+  rate: string;
+  pitch: string;
+}): string {
+  return [
+    "TTS synthesis failed",
+    `provider=${diagnostic.provider}`,
+    `error=${diagnostic.errorName}`,
+    `message=${diagnostic.message}`,
+    `textCharacters=${diagnostic.textCharacters}`,
+    `textPreview=${JSON.stringify(diagnostic.textPreview)}`,
+    `voice=${diagnostic.voice}`,
+    `rate=${diagnostic.rate}`,
+    `pitch=${diagnostic.pitch}`,
+  ].join("; ");
 }
 
 async function normalizeAudioBytes(value: unknown): Promise<Uint8Array> {

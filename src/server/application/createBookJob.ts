@@ -1,6 +1,10 @@
 import type { BookRepository, JobRepository } from "@/server/ports/repositories";
 import type { FileStorage } from "@/server/ports/storage";
-import type { UploadTextDto, UploadTextResponseDto } from "@/shared/schemas/upload";
+import type {
+  UploadFileDto,
+  UploadTextDto,
+  UploadTextResponseDto,
+} from "@/shared/schemas/upload";
 import {
   DEFAULT_TTS_PITCH,
   DEFAULT_TTS_RATE,
@@ -13,14 +17,17 @@ export type CreateBookJobDeps = {
   storage: FileStorage;
 };
 
+export type CreateBookJobInput =
+  | UploadTextDto
+  | (Omit<UploadFileDto, "fileSize"> & {
+      source: Uint8Array;
+    });
+
 export async function createBookJob(
   deps: CreateBookJobDeps,
-  input: UploadTextDto,
+  input: CreateBookJobInput,
 ): Promise<UploadTextResponseDto> {
-  const sourcePath = await deps.storage.saveTextSource({
-    content: input.text,
-    fileName: `${input.title}.txt`,
-  });
+  const sourcePath = await saveSource(deps.storage, input);
 
   const book = await deps.books.create({
     title: input.title,
@@ -43,4 +50,21 @@ export async function createBookJob(
     bookId: book.id,
     jobId: job.id,
   };
+}
+
+function saveSource(
+  storage: FileStorage,
+  input: CreateBookJobInput,
+): Promise<string> {
+  if ("source" in input) {
+    return storage.saveBinarySource({
+      content: input.source,
+      fileName: input.fileName,
+    });
+  }
+
+  return storage.saveTextSource({
+    content: input.text,
+    fileName: `${input.title}.txt`,
+  });
 }

@@ -30,7 +30,7 @@ function PlayerPageContent({ bookId }: { bookId: string }) {
   }
 
   if (query.data.parts.length === 0) {
-    return <p className="text-sm text-stone-600">No playable audio yet.</p>;
+    return <p className="text-sm text-stone-600">No chapters planned yet.</p>;
   }
 
   return <AudioPlayer player={query.data} />;

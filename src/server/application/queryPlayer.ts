@@ -1,9 +1,14 @@
 import type { PlayerDto } from "@/shared/schemas/player";
-import type { BookRepository, PartRepository } from "@/server/ports/repositories";
+import type {
+  BookRepository,
+  ChunkRepository,
+  PartRepository,
+} from "@/server/ports/repositories";
 
 export type QueryPlayerDeps = {
   books: BookRepository;
   parts: PartRepository;
+  chunks?: ChunkRepository;
 };
 
 export async function queryPlayer(
@@ -19,18 +24,39 @@ export async function queryPlayer(
 
   return {
     bookId,
-    parts: parts
-      .filter((part) => part.status === "completed" && part.audioPath)
-      .map((part) => ({
+    parts: await Promise.all(
+      parts.map(async (part) => ({
         id: part.id,
         index: part.index,
         title: part.title,
-        audioUrl: buildPlayerAudioUrl(bookId, part.id),
-        durationSeconds: part.durationSeconds ?? 0,
+        status: part.status,
+        audioUrl:
+          part.status === "completed" && part.audioPath
+            ? buildPlayerAudioUrl(bookId, part.id)
+            : null,
+        durationSeconds: part.durationSeconds,
+        errorMessage:
+          part.status === "failed" ? await findPartError(deps, part.id) : null,
       })),
+    ),
   };
 }
 
 function buildPlayerAudioUrl(bookId: string, partId: string) {
   return `/api/player/books/${bookId}?partId=${partId}`;
+}
+
+async function findPartError(
+  deps: QueryPlayerDeps,
+  partId: string,
+): Promise<string | null> {
+  if (!deps.chunks) {
+    return null;
+  }
+
+  const chunks = await deps.chunks.listByPartId(partId);
+  return (
+    chunks.find((chunk) => chunk.status === "failed" && chunk.errorMessage)
+      ?.errorMessage ?? null
+  );
 }

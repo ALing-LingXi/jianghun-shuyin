@@ -2,6 +2,7 @@ export const JOB_STATUSES = [
   "queued",
   "processing",
   "completed",
+  "completed_with_errors",
   "failed",
   "cancelled",
 ] as const;
@@ -29,7 +30,15 @@ export const BOOK_STATUSES = [
 
 export type BookStatus = (typeof BOOK_STATUSES)[number];
 
-export const PART_STATUSES = ["pending", "processing", "completed", "failed"] as const;
+export const PART_STATUSES = [
+  "pending",
+  "processing",
+  "tts",
+  "assembling",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
 
 export type PartStatus = (typeof PART_STATUSES)[number];
 

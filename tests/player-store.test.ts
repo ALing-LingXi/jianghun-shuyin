@@ -7,6 +7,8 @@ afterEach(() => {
     partId: null,
     parts: [],
     isPlaying: false,
+    stopAfterCurrent: false,
+    sleepTimerEndsAt: null,
   });
 });
 

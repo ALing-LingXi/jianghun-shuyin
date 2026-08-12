@@ -38,7 +38,12 @@ export async function GET(
 
   if (parsedQuery.data.partId) {
     const part = await container.parts.findById(parsedQuery.data.partId);
-    if (!part || part.bookId !== parsedParams.data.bookId || !part.audioPath) {
+    if (
+      !part ||
+      part.bookId !== parsedParams.data.bookId ||
+      part.status !== "completed" ||
+      !part.audioPath
+    ) {
       return NextResponse.json(
         { error: { code: "PART_NOT_FOUND", message: "Part not found" } },
         { status: 404 },

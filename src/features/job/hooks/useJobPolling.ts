@@ -20,6 +20,7 @@ export class JobApiError extends Error {
 export function getJobPollingInterval(status?: JobStatus): number | false {
   if (
     status === "completed" ||
+    status === "completed_with_errors" ||
     status === "failed" ||
     status === "cancelled"
   ) {

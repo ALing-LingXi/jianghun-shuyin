@@ -39,14 +39,19 @@ const STAGE_PROGRESS = {
   cleaning: 30,
   chapter_detection: 50,
   planning: 80,
-  tts: 90,
+  tts: 85,
   assembling: 95,
   completed: 100,
   failed: 0,
   cancelled: 0,
 } as const;
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "completed_with_errors",
+  "failed",
+  "cancelled",
+]);
 
 export async function runPipelineJob(
   deps: RunPipelineJobDeps,
@@ -96,12 +101,12 @@ export async function runPipelineJob(
     }
 
     if (job.stage === "tts") {
-      await ttsStage(deps, job, book.sourcePath);
+      await processNextPartStage(deps, job, book.sourcePath);
       return;
     }
 
     if (job.stage === "assembling") {
-      await assemblingStage(deps, job);
+      await finalizeJobStage(deps, job);
       return;
     }
 
@@ -114,6 +119,15 @@ export async function runPipelineJob(
       return;
     }
   } catch (error) {
+    console.error("[worker] pipeline job failed", {
+      jobId: job.id,
+      bookId: job.bookId,
+      status: job.status,
+      stage: job.stage,
+      progress: job.progress,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: toErrorMessage(error),
+    });
     await failJob(deps.jobs, job, toErrorMessage(error));
   }
 }
@@ -195,14 +209,17 @@ async function planningStage(
     subdirectory: "reports",
   });
 
-  for (const plannedPart of parsed.plan.parts) {
-    await deps.parts.create({
-      bookId: job.bookId,
-      index: plannedPart.index,
-      title: plannedPart.title,
-      durationSeconds: plannedPart.estimatedDurationSeconds,
-      status: "pending",
-    });
+  const existingParts = await deps.parts.listByBookId(job.bookId);
+  if (existingParts.length === 0) {
+    for (const plannedPart of parsed.plan.parts) {
+      await deps.parts.create({
+        bookId: job.bookId,
+        index: plannedPart.index,
+        title: plannedPart.title,
+        durationSeconds: plannedPart.estimatedDurationSeconds,
+        status: "pending",
+      });
+    }
   }
 
   await deps.jobs.updateById(job.id, {
@@ -212,7 +229,7 @@ async function planningStage(
   });
 }
 
-async function ttsStage(
+async function processNextPartStage(
   deps: RunPipelineJobDeps,
   job: Job,
   sourcePath: string,
@@ -220,52 +237,80 @@ async function ttsStage(
   const parsed = await parseSourceText(deps.storage, sourcePath);
   const parts = await deps.parts.listByBookId(job.bookId);
 
-  for (const plannedPart of parsed.plan.parts) {
-    const part = parts.find((candidate) => candidate.index === plannedPart.index);
-    if (!part) {
-      throw new Error(`Part ${plannedPart.index} not found for book ${job.bookId}`);
-    }
-
-    await deps.parts.updateById(part.id, {
-      status: "processing",
-      audioPath: null,
-      durationSeconds: null,
-    });
-
-    const result = await synthesizePartChunks(
-      {
-        chunks: deps.chunks,
-        tts: deps.tts,
-      },
-      {
-        partId: part.id,
-        text: plannedPart.text,
-        voice: job.voice || DEFAULT_TTS_VOICE,
-        rate: job.rate || DEFAULT_TTS_RATE,
-        pitch: job.pitch || DEFAULT_TTS_PITCH,
-      },
-    );
-
-    if (result.failedCount > 0) {
-      await deps.parts.updateById(part.id, { status: "failed" });
-      const failedChunk = result.chunks.find(
-        (chunk) => chunk.status === "failed",
-      );
-      throw new Error(
-        failedChunk?.errorMessage ??
-          `TTS failed for part ${part.index}`,
-      );
-    }
+  if (parts.length === 0) {
+    throw new Error(`No parts found for book ${job.bookId}`);
   }
 
-  await deps.jobs.updateById(job.id, {
-    stage: "assembling",
-    progress: STAGE_PROGRESS.assembling,
-    errorMessage: null,
+  const nextPart = parts.find((part) =>
+    ["pending", "processing", "tts", "assembling"].includes(part.status),
+  );
+
+  if (!nextPart) {
+    await deps.jobs.updateById(job.id, {
+      stage: "assembling",
+      progress: STAGE_PROGRESS.assembling,
+      errorMessage: summarizePartFailures(parts),
+    });
+    return;
+  }
+
+  const plannedPart = parsed.plan.parts.find(
+    (candidate) => candidate.index === nextPart.index,
+  );
+  if (!plannedPart) {
+    await markPartFailed(deps, nextPart, `Plan for part ${nextPart.index} not found`);
+    await updateJobChapterProgress(deps, job);
+    return;
+  }
+
+  await clearPartAudioOutputs(deps, nextPart);
+  await deps.chunks.deleteByPartId(nextPart.id);
+  await deps.parts.updateById(nextPart.id, {
+    status: "tts",
+    audioPath: null,
+    durationSeconds: null,
   });
+
+  const result = await synthesizePartChunks(
+    {
+      chunks: deps.chunks,
+      tts: deps.tts,
+    },
+    {
+      partId: nextPart.id,
+      text: plannedPart.text,
+      voice: job.voice || DEFAULT_TTS_VOICE,
+      rate: job.rate || DEFAULT_TTS_RATE,
+      pitch: job.pitch || DEFAULT_TTS_PITCH,
+    },
+  );
+
+  if (result.failedCount > 0) {
+    const failedChunks = await deps.chunks.listByPartId(nextPart.id);
+    const failedChunk = failedChunks.find(
+      (chunk) => chunk.status === "failed" && chunk.errorMessage,
+    );
+    await markPartFailed(
+      deps,
+      nextPart,
+      failedChunk?.errorMessage ?? `TTS failed for part ${nextPart.index}`,
+    );
+    await updateJobChapterProgress(deps, job);
+    return;
+  }
+
+  await deps.parts.updateById(nextPart.id, { status: "assembling" });
+
+  try {
+    await assemblePart(deps, nextPart);
+  } catch (error) {
+    await markPartFailed(deps, nextPart, toErrorMessage(error));
+  }
+
+  await updateJobChapterProgress(deps, job);
 }
 
-async function assemblingStage(
+async function finalizeJobStage(
   deps: RunPipelineJobDeps,
   job: Job,
 ): Promise<void> {
@@ -275,27 +320,113 @@ async function assemblingStage(
     throw new Error(`No parts found for book ${job.bookId}`);
   }
 
-  for (const part of parts) {
-    await assemblePart(deps, part);
+  const failedParts = parts.filter((part) => part.status === "failed");
+
+  await deps.jobs.updateById(job.id, {
+    status: failedParts.length > 0 ? "completed_with_errors" : "completed",
+    stage: "completed",
+    progress: STAGE_PROGRESS.completed,
+    errorMessage:
+      failedParts.length > 0
+        ? `${failedParts.length} chapter(s) failed. Playable chapters are still available.`
+        : null,
+  });
+}
+
+async function updateJobChapterProgress(
+  deps: RunPipelineJobDeps,
+  job: Job,
+): Promise<void> {
+  const parts = await deps.parts.listByBookId(job.bookId);
+  const settledCount = parts.filter((part) =>
+    ["completed", "failed", "cancelled"].includes(part.status),
+  ).length;
+  const progress =
+    parts.length === 0
+      ? STAGE_PROGRESS.tts
+      : Math.min(
+          STAGE_PROGRESS.assembling,
+          STAGE_PROGRESS.tts +
+            Math.floor(
+              ((STAGE_PROGRESS.assembling - STAGE_PROGRESS.tts) * settledCount) /
+                parts.length,
+            ),
+        );
+
+  if (settledCount >= parts.length) {
+    await deps.jobs.updateById(job.id, {
+      stage: "assembling",
+      progress: STAGE_PROGRESS.assembling,
+      errorMessage: summarizePartFailures(parts),
+    });
+    return;
   }
 
   await deps.jobs.updateById(job.id, {
-    status: "completed",
-    stage: "completed",
-    progress: STAGE_PROGRESS.completed,
-    errorMessage: null,
+    stage: "tts",
+    progress,
+    errorMessage: summarizePartFailures(parts),
   });
+}
+
+async function markPartFailed(
+  deps: RunPipelineJobDeps,
+  part: Part,
+  reason: string,
+): Promise<void> {
+  await clearPartAudioOutputs(deps, part);
+  await deps.parts.updateById(part.id, {
+    status: "failed",
+    audioPath: null,
+    durationSeconds: null,
+  });
+  console.error("[worker] part failed", {
+    bookId: part.bookId,
+    partId: part.id,
+    partIndex: part.index,
+    title: part.title,
+    errorMessage: reason,
+  });
+}
+
+async function clearPartAudioOutputs(
+  deps: RunPipelineJobDeps,
+  part: Part,
+): Promise<void> {
+  const chunks = await deps.chunks.listByPartId(part.id);
+
+  await Promise.all(
+    chunks
+      .map((chunk) => chunk.audioPath)
+      .filter((audioPath): audioPath is string => Boolean(audioPath))
+      .map((audioPath) => deps.storage.deleteFile(audioPath)),
+  );
+
+  if (part.audioPath) {
+    await deps.storage.deleteFile(part.audioPath);
+  }
+
+  await Promise.all(
+    chunks.map((chunk) =>
+      deps.chunks.updateById(chunk.id, {
+        audioPath: null,
+      }),
+    ),
+  );
+}
+
+function summarizePartFailures(parts: Part[]): string | null {
+  const failedCount = parts.filter((part) => part.status === "failed").length;
+  return failedCount > 0 ? `${failedCount} chapter(s) failed.` : null;
 }
 
 async function assemblePart(
   deps: RunPipelineJobDeps,
   part: Part,
 ): Promise<void> {
-  await deps.parts.updateById(part.id, { status: "processing" });
   const chunks = await deps.chunks.listByPartId(part.id);
 
   if (chunks.length === 0) {
-    await deps.parts.updateById(part.id, { status: "failed" });
     throw new Error(`Part ${part.index} has no chunks to assemble`);
   }
 
@@ -303,26 +434,20 @@ async function assemblePart(
     (chunk) => chunk.status !== "completed" || !chunk.audioPath,
   );
   if (incompleteChunk) {
-    await deps.parts.updateById(part.id, { status: "failed" });
     throw new Error(`Part ${part.index} has incomplete chunk ${incompleteChunk.id}`);
   }
 
-  try {
-    const assembled = await deps.audio.assemblePart({
-      partId: part.id,
-      chunkAudioPaths: chunks.map((chunk) => chunk.audioPath!),
-      fileName: `${part.id}.mp3`,
-    });
+  const assembled = await deps.audio.assemblePart({
+    partId: part.id,
+    chunkAudioPaths: chunks.map((chunk) => chunk.audioPath!),
+    fileName: `${part.id}.mp3`,
+  });
 
-    await deps.parts.updateById(part.id, {
-      audioPath: assembled.audioPath,
-      durationSeconds: assembled.durationSeconds,
-      status: "completed",
-    });
-  } catch (error) {
-    await deps.parts.updateById(part.id, { status: "failed" });
-    throw error;
-  }
+  await deps.parts.updateById(part.id, {
+    audioPath: assembled.audioPath,
+    durationSeconds: assembled.durationSeconds,
+    status: "completed",
+  });
 }
 
 async function parseSourceText(

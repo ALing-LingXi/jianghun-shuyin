@@ -100,6 +100,31 @@ describe("EdgeTtsProvider", () => {
         rate: DEFAULT_TTS_RATE,
         pitch: DEFAULT_TTS_PITCH,
       }),
-    ).rejects.toThrow("TTS synthesis failed: network unavailable");
+    ).rejects.toThrow(
+      "TTS synthesis failed; provider=edge-tts-universal; error=Error; message=network unavailable",
+    );
+  });
+
+  it("adds TTS request diagnostics to provider failures", async () => {
+    const { storage } = await createStorage();
+    const provider = new EdgeTtsProvider({
+      storage,
+      synthesizeSpeech: async () => {
+        const error = new Error("No audio was received.");
+        error.name = "NoAudioReceived";
+        throw error;
+      },
+    });
+
+    await expect(
+      provider.synthesize({
+        text: "短文本测试。",
+        voice: DEFAULT_TTS_VOICE,
+        rate: "+10%",
+        pitch: "+5Hz",
+      }),
+    ).rejects.toThrow(
+      'error=NoAudioReceived; message=NoAudioReceived: No audio was received.; textCharacters=6; textPreview="短文本测试。"; voice=zh-CN-YunxiNeural; rate=+10%; pitch=+5Hz',
+    );
   });
 });

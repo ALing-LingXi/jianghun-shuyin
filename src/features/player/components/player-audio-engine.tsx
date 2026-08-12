@@ -2,6 +2,15 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { usePlayerStore } from "../player-store";
+import type { PlayerPartDto } from "@/shared/schemas/player";
+
+type PlayablePart = PlayerPartDto & {
+  audioUrl: string;
+};
+
+function isPlayablePart(part: PlayerPartDto | null): part is PlayablePart {
+  return part?.status === "completed" && typeof part.audioUrl === "string";
+}
 
 export function PlayerAudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -12,7 +21,8 @@ export function PlayerAudioEngine() {
   const goToNext = usePlayerStore((state) => state.goToNext);
 
   const currentPart = useMemo(() => {
-    return parts.find((part) => part.id === partId) ?? null;
+    const part = parts.find((candidate) => candidate.id === partId) ?? null;
+    return isPlayablePart(part) ? part : null;
   }, [partId, parts]);
 
   useEffect(() => {

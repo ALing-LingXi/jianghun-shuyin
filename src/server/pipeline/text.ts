@@ -62,7 +62,9 @@ export function cleanText(text: string): CleanTextResult {
     .replace(/^\uFEFF/, "")
     .replace(/\r\n|\r/g, "\n")
     .replace(/\u00a0/g, " ");
-  const lines = normalized.split("\n").map((line) => line.replace(/[ \t\u3000]+$/g, ""));
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u3000]+$/g, ""));
   const beforeTrimLength = lines.length;
   const trimmedLines = trimOuterBlankLines(lines);
   const trimmedBlankLineCount = beforeTrimLength - trimmedLines.length;
@@ -112,7 +114,10 @@ export function detectChapters(text: string): DetectChaptersResult {
     const heading = headings[headingIndex];
     const nextHeading = headings[headingIndex + 1];
     const endLine = nextHeading ? nextHeading.lineIndex - 1 : lines.length - 1;
-    const chapterText = lines.slice(heading.lineIndex, endLine + 1).join("\n").trim();
+    const chapterText = lines
+      .slice(heading.lineIndex, endLine + 1)
+      .join("\n")
+      .trim();
 
     if (chapterText.length === 0) {
       continue;
@@ -150,28 +155,25 @@ export function planParts(
   const parts: PlannedPart[] = [];
 
   for (const chapter of sourceChapters) {
-    const segments = splitTextForParts(chapter.text, maxPartCharacters);
+    const chapterText = chapter.text.trim();
 
-    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-      const segment = segments[segmentIndex];
-
-      parts.push({
-        index: parts.length,
-        title:
-          segments.length === 1
-            ? chapter.title
-            : `${chapter.title} (${segmentIndex + 1}/${segments.length})`,
-        text: segment,
-        chapterIndex: chapter.index,
-        segmentIndex,
-        segmentCount: segments.length,
-        characterCount: segment.length,
-        estimatedDurationSeconds: Math.max(
-          1,
-          Math.ceil(segment.length / estimatedCharactersPerSecond),
-        ),
-      });
+    if (chapterText.length === 0) {
+      continue;
     }
+
+    parts.push({
+      index: parts.length,
+      title: chapter.title,
+      text: chapterText,
+      chapterIndex: chapter.index,
+      segmentIndex: 0,
+      segmentCount: 1,
+      characterCount: chapterText.length,
+      estimatedDurationSeconds: Math.max(
+        1,
+        Math.ceil(chapterText.length / estimatedCharactersPerSecond),
+      ),
+    });
   }
 
   return {
@@ -275,15 +277,15 @@ function isChapterHeading(title: string): boolean {
     return false;
   }
 
-  if (/[。！？!?；;]/.test(title)) {
+  if (/[。！？；]/u.test(title)) {
     return false;
   }
 
   return [
-    /^第\s*[0-9０-９一二三四五六七八九十百千万萬零〇两兩壹贰叁肆伍陆柒捌玖拾佰仟]+\s*[章节回卷部篇幕集](?:\s*[：:、.\-]\s*\S.{0,40}|\s+\S.{0,40}|)$/,
-    /^(序章|楔子|前言|后记|尾声|番外)(\s*[:：、.-]\s*.{0,40})?$/,
-    /^(chapter|chap\.?)\s+[0-9]+(\s*[:：、.-]\s*.{0,40})?$/i,
-    /^[0-9０-９]{1,4}\s*[.．、]\s*\S.{0,40}$/,
+    /^第\s*[0-9０-９一二三四五六七八九十百千万萬零〇两兩壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+\s*[章节回卷部篇幕集](?:\s*[:：、.\-]\s*\S.{0,40}|\s+\S.{0,40}|)$/u,
+    /^(序章|楔子|前言|后记|尾声|番外)(\s*[:：、.\-]\s*.{0,40})?$/u,
+    /^(chapter|chap\.?)\s+[0-9]+(\s*[:：、.\-]\s*.{0,40})?$/iu,
+    /^[0-9０-９]{1,4}\s*[.．、]\s*\S.{0,40}$/u,
   ].some((pattern) => pattern.test(title));
 }
 
@@ -308,90 +310,4 @@ function buildFallbackChapters(
       text: trimmed,
     },
   ];
-}
-
-function splitTextForParts(text: string, maxPartCharacters: number): string[] {
-  const trimmed = text.trim();
-
-  if (trimmed.length === 0) {
-    return [];
-  }
-
-  if (trimmed.length <= maxPartCharacters) {
-    return [trimmed];
-  }
-
-  const blocks = trimmed.split(/\n+/).map((block) => block.trim()).filter(Boolean);
-  const segments: string[] = [];
-  let current = "";
-
-  for (const block of blocks) {
-    if (block.length > maxPartCharacters) {
-      if (current.length > 0) {
-        segments.push(current);
-        current = "";
-      }
-
-      segments.push(...splitOversizedBlock(block, maxPartCharacters));
-      continue;
-    }
-
-    const candidate = current.length > 0 ? `${current}\n${block}` : block;
-
-    if (candidate.length <= maxPartCharacters) {
-      current = candidate;
-    } else {
-      segments.push(current);
-      current = block;
-    }
-  }
-
-  if (current.length > 0) {
-    segments.push(current);
-  }
-
-  return segments;
-}
-
-function splitOversizedBlock(block: string, maxPartCharacters: number): string[] {
-  const sentences = block.match(/[^。！？!?；;]+[。！？!?；;]?/g) ?? [block];
-  const segments: string[] = [];
-  let current = "";
-
-  for (const sentence of sentences.map((value) => value.trim()).filter(Boolean)) {
-    if (sentence.length > maxPartCharacters) {
-      if (current.length > 0) {
-        segments.push(current);
-        current = "";
-      }
-
-      segments.push(...hardSplit(sentence, maxPartCharacters));
-      continue;
-    }
-
-    const candidate = current.length > 0 ? `${current}${sentence}` : sentence;
-
-    if (candidate.length <= maxPartCharacters) {
-      current = candidate;
-    } else {
-      segments.push(current);
-      current = sentence;
-    }
-  }
-
-  if (current.length > 0) {
-    segments.push(current);
-  }
-
-  return segments;
-}
-
-function hardSplit(text: string, maxPartCharacters: number): string[] {
-  const segments: string[] = [];
-
-  for (let start = 0; start < text.length; start += maxPartCharacters) {
-    segments.push(text.slice(start, start + maxPartCharacters));
-  }
-
-  return segments;
 }

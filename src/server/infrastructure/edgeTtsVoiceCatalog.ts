@@ -1,6 +1,11 @@
 import type { VoiceCatalog } from "@/server/ports/voiceCatalog";
+import {
+  CHINESE_TTS_VOICES,
+  DEFAULT_CHINESE_TTS_VOICE,
+  DEFAULT_TTS_VOICE,
+  isChineseTtsVoiceId,
+} from "@/server/tts/voiceCatalog";
 import type { TtsVoice } from "@/shared/schemas/tts";
-import { DEFAULT_TTS_VOICE } from "@/server/tts/voiceCatalog";
 
 type EdgeTtsVoice = {
   ShortName: string;
@@ -29,11 +34,12 @@ export class EdgeTtsVoiceCatalog implements VoiceCatalog {
       const mapped = voices
         .map(toTtsVoice)
         .filter((voice): voice is TtsVoice => voice !== null)
+        .filter((voice) => isChineseTtsVoiceId(voice.id))
         .sort(compareVoices);
 
       return withDefaultVoice(mapped);
     } catch {
-      return [defaultVoice()];
+      return [...CHINESE_TTS_VOICES];
     }
   }
 }
@@ -64,28 +70,30 @@ function toTtsVoice(voice: EdgeTtsVoice): TtsVoice | null {
 }
 
 function withDefaultVoice(voices: TtsVoice[]): TtsVoice[] {
-  if (voices.some((voice) => voice.id === DEFAULT_TTS_VOICE)) {
-    return voices;
+  const uniqueVoices = dedupeVoices(voices);
+  if (uniqueVoices.some((voice) => voice.id === DEFAULT_TTS_VOICE)) {
+    return uniqueVoices;
   }
 
-  return [defaultVoice(), ...voices];
+  return [DEFAULT_CHINESE_TTS_VOICE, ...uniqueVoices];
 }
 
-function defaultVoice(): TtsVoice {
-  return {
-    id: DEFAULT_TTS_VOICE,
-    label: "云溪",
-    locale: "zh-CN",
-    gender: "Male",
-  };
+function dedupeVoices(voices: TtsVoice[]): TtsVoice[] {
+  const seen = new Set<string>();
+  return voices.filter((voice) => {
+    if (seen.has(voice.id)) {
+      return false;
+    }
+
+    seen.add(voice.id);
+    return true;
+  });
 }
 
 function shortVoiceLabel(id: string): string {
-  const key = id
+  return id
     .replace(/^[a-z]{2}-[A-Z]{2}(?:-[a-z]+)?-/, "")
     .replace(/(?::.*|Multilingual|Dialects|Neural)/g, "");
-
-  return CHINESE_VOICE_LABELS[key] ?? key;
 }
 
 function compareVoices(left: TtsVoice, right: TtsVoice): number {
@@ -101,72 +109,9 @@ function compareVoices(left: TtsVoice, right: TtsVoice): number {
     return 1;
   }
 
-  const leftPriority = localePriority(left.locale);
-  const rightPriority = localePriority(right.locale);
-
-  if (leftPriority !== rightPriority) {
-    return leftPriority - rightPriority;
-  }
-
   if (left.locale !== right.locale) {
     return left.locale.localeCompare(right.locale);
   }
 
   return left.label.localeCompare(right.label);
 }
-
-function localePriority(locale: string): number {
-  if (locale === "zh-CN") {
-    return 0;
-  }
-
-  if (locale.startsWith("zh-")) {
-    return 1;
-  }
-
-  return 2;
-}
-
-const CHINESE_VOICE_LABELS: Record<string, string> = {
-  HsiaoChen: "晓臻",
-  Maroonallegro: "栗色",
-  Peachgranite: "桃石",
-  XiaoMin: "晓敏",
-  Xiaobei: "晓北",
-  Xiaochen: "晓辰",
-  Xiaohan: "晓涵",
-  Xiaomeng: "晓梦",
-  Xiaomo: "晓墨",
-  Xiaoni: "晓妮",
-  Xiaoqiu: "晓秋",
-  Xiaorou: "晓柔",
-  Xiaorui: "晓睿",
-  Xiaoshuang: "晓双",
-  Xiaoxiao: "晓晓",
-  Xiaoxiao2: "晓晓 2",
-  Xiaoyan: "晓颜",
-  Xiaoyi: "晓伊",
-  Xiaoyou: "晓悠",
-  Xiaoyu: "晓雨",
-  Xiaoyue: "晓月",
-  Xiaozhen: "晓甄",
-  Yunbiao: "云彪",
-  Yundeng: "云登",
-  Yunfan: "云帆",
-  Yunfeng: "云枫",
-  Yunhan: "云翰",
-  Yunhao: "云皓",
-  Yunjian: "云健",
-  Yunjie: "云杰",
-  Yunqi: "云启",
-  YunSong: "云松",
-  Yunxiao: "云霄",
-  Yunxiang: "云翔",
-  Yunxia: "云夏",
-  Yunxi: "云溪",
-  Yunyi: "云逸",
-  Yunye: "云野",
-  Yunyang: "云扬",
-  Yunze: "云泽",
-  Yunzhe: "云哲",
-};

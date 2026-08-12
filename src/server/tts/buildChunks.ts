@@ -9,7 +9,7 @@ export type BuildChunksInput = {
   maxCharacters?: number;
 };
 
-const DEFAULT_MAX_CHUNK_CHARACTERS = 800;
+const DEFAULT_MAX_CHUNK_CHARACTERS = 350;
 
 export function buildChunks(input: BuildChunksInput): PlannedChunk[] {
   const maxCharacters = input.maxCharacters ?? DEFAULT_MAX_CHUNK_CHARACTERS;

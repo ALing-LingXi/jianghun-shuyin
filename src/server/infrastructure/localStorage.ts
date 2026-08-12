@@ -11,11 +11,33 @@ export class LocalStorage implements FileStorage {
   constructor(private readonly rootDir: string) {}
 
   async saveTextSource(input: StoreTextInput): Promise<string> {
-    const targetDir = path.join(this.rootDir, input.subdirectory ?? "sources");
+    return this.saveSource(
+      input.content,
+      input.fileName,
+      input.subdirectory,
+      "utf8",
+    );
+  }
+
+  async saveBinarySource(input: StoreBinaryInput): Promise<string> {
+    return this.saveSource(input.content, input.fileName, input.subdirectory);
+  }
+
+  private async saveSource(
+    content: string | Uint8Array,
+    fileName: string,
+    subdirectory?: string,
+    encoding?: "utf8",
+  ): Promise<string> {
+    const targetDir = path.join(this.rootDir, subdirectory ?? "sources");
     await mkdir(targetDir, { recursive: true });
-    const safeName = sanitizeFileName(input.fileName, "source.txt");
+    const safeName = sanitizeFileName(fileName, "source.txt");
     const filePath = path.join(targetDir, `${randomUUID()}-${safeName}`);
-    await writeFile(filePath, input.content, "utf8");
+    if (typeof content === "string") {
+      await writeFile(filePath, content, encoding ?? "utf8");
+    } else {
+      await writeFile(filePath, content);
+    }
 
     return filePath;
   }

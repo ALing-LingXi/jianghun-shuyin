@@ -16,6 +16,8 @@ export type SynthesizePartChunksInput = {
   rate: string;
   pitch: string;
   maxCharacters?: number;
+  maxAttempts?: number;
+  retryDelaysMs?: readonly number[];
 };
 
 export type SynthesizePartChunksResult = {
@@ -24,7 +26,8 @@ export type SynthesizePartChunksResult = {
   failedCount: number;
 };
 
-const MAX_TTS_ATTEMPTS = 3;
+const DEFAULT_MAX_TTS_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [1_000, 3_000, 8_000, 15_000, 30_000] as const;
 
 export async function synthesizePartChunks(
   deps: SynthesizePartChunksDeps,
@@ -35,7 +38,6 @@ export async function synthesizePartChunks(
     maxCharacters: input.maxCharacters,
   });
   const createdChunks: Chunk[] = [];
-  let cacheHits = 0;
   let failedCount = 0;
 
   for (const plannedChunk of plannedChunks) {
@@ -45,21 +47,6 @@ export async function synthesizePartChunks(
       rate: input.rate,
       pitch: input.pitch,
     });
-    const cached = await deps.chunks.findCompletedByTextHash(cacheKey);
-
-    if (cached?.audioPath) {
-      cacheHits += 1;
-      createdChunks.push(
-        await deps.chunks.create({
-          partId: input.partId,
-          index: plannedChunk.index,
-          textHash: cacheKey,
-          audioPath: cached.audioPath,
-          status: "completed",
-        }),
-      );
-      continue;
-    }
 
     const chunk = await deps.chunks.create({
       partId: input.partId,
@@ -75,6 +62,12 @@ export async function synthesizePartChunks(
         rate: input.rate,
         pitch: input.pitch,
         fileName: `${input.partId}-${plannedChunk.index}.mp3`,
+      }, {
+        partId: input.partId,
+        chunkIndex: plannedChunk.index,
+        textHash: cacheKey,
+        maxAttempts: input.maxAttempts ?? DEFAULT_MAX_TTS_ATTEMPTS,
+        retryDelaysMs: input.retryDelaysMs ?? RETRY_DELAYS_MS,
       });
       const completed = await deps.chunks.updateById(chunk.id, {
         audioPath: synthesis.audio.audioPath,
@@ -85,18 +78,27 @@ export async function synthesizePartChunks(
       createdChunks.push(completed ?? chunk);
     } catch (error) {
       failedCount += 1;
+      const retryCount = retryCountFromError(error);
+      const errorMessage = toErrorMessage(error);
       const failed = await deps.chunks.updateById(chunk.id, {
         status: "failed",
-        retryCount: retryCountFromError(error),
-        errorMessage: toErrorMessage(error),
+        retryCount,
+        errorMessage,
       });
-      createdChunks.push(failed ?? chunk);
+      createdChunks.push(
+        failed ?? {
+          ...chunk,
+          status: "failed",
+          retryCount,
+          errorMessage,
+        },
+      );
     }
   }
 
   return {
     chunks: createdChunks,
-    cacheHits,
+    cacheHits: 0,
     failedCount,
   };
 }
@@ -104,13 +106,20 @@ export async function synthesizePartChunks(
 async function synthesizeWithRetry(
   tts: TTSProvider,
   input: Parameters<TTSProvider["synthesize"]>[0],
+  context: {
+    partId: string;
+    chunkIndex: number;
+    textHash: string;
+    maxAttempts: number;
+    retryDelaysMs: readonly number[];
+  },
 ): Promise<{
   audio: Awaited<ReturnType<TTSProvider["synthesize"]>>;
   retryCount: number;
 }> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < MAX_TTS_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < context.maxAttempts; attempt += 1) {
     try {
       return {
         audio: await tts.synthesize(input),
@@ -118,15 +127,36 @@ async function synthesizeWithRetry(
       };
     } catch (error) {
       lastError = error;
+      const retryable = isRetryableTtsError(error);
+      console.warn("[tts] chunk synthesis attempt failed", {
+        ...context,
+        attempt: attempt + 1,
+        textCharacters: input.text.length,
+        textPreview: previewText(input.text),
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+        retryable,
+        errorName: errorName(error),
+        errorMessage: toErrorMessage(error),
+      });
+
+      if (!retryable) {
+        throw error;
+      }
+
+      if (attempt < context.maxAttempts - 1) {
+        await waitForRetry(attempt, context.retryDelaysMs);
+      }
     }
   }
 
-  throw new TtsSynthesisAttemptsError(lastError, MAX_TTS_ATTEMPTS - 1);
+  throw new TtsSynthesisAttemptsError(lastError, context.maxAttempts - 1);
 }
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof TtsSynthesisAttemptsError) {
-    return toErrorMessage(error.cause);
+    return error.message;
   }
 
   if (error instanceof Error) {
@@ -140,11 +170,60 @@ function retryCountFromError(error: unknown): number {
   return error instanceof TtsSynthesisAttemptsError ? error.retryCount : 0;
 }
 
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
+function previewText(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 120
+    ? `${normalized.slice(0, 120)}...`
+    : normalized;
+}
+
+export function isRetryableTtsError(error: unknown): boolean {
+  const name = errorName(error).toLowerCase();
+  const message = toErrorMessage(error).toLowerCase();
+  const combined = `${name} ${message}`;
+
+  if (/\b5\d\d\b/.test(combined)) {
+    return true;
+  }
+
+  return [
+    "noaudioreceived",
+    "no audio was received",
+    "websocket",
+    "socket",
+    "timeout",
+    "timed out",
+    "econnreset",
+    "etimedout",
+    "rate limit",
+    "429",
+  ].some((token) => combined.includes(token));
+}
+
+async function waitForRetry(
+  attempt: number,
+  retryDelaysMs: readonly number[],
+): Promise<void> {
+  const delayMs =
+    retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] ?? 0;
+  if (delayMs <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 class TtsSynthesisAttemptsError extends Error {
   constructor(
     readonly cause: unknown,
     readonly retryCount: number,
   ) {
-    super(toErrorMessage(cause));
+    super(
+      `${toErrorMessage(cause)} (after ${retryCount + 1} TTS attempts)`,
+    );
   }
 }

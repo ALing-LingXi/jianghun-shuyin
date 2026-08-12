@@ -131,7 +131,7 @@ describe("synthesizePartChunks", () => {
     expect(tts.synthesize).toHaveBeenCalledTimes(result.chunks.length);
   });
 
-  it("reuses completed audio for identical text and parameters", async () => {
+  it("does not reuse completed audio across parts", async () => {
     const context = await createTestContext();
     const secondPart = await context.parts.create({
       bookId: context.book.id,
@@ -161,9 +161,10 @@ describe("synthesizePartChunks", () => {
       { partId: secondPart.id, ...input },
     );
 
-    expect(tts.synthesize).toHaveBeenCalledTimes(1);
-    expect(second.cacheHits).toBe(1);
-    expect(second.chunks[0].audioPath).toBe(first.chunks[0].audioPath);
+    expect(tts.synthesize).toHaveBeenCalledTimes(2);
+    expect(first.cacheHits).toBe(0);
+    expect(second.cacheHits).toBe(0);
+    expect(second.chunks[0].audioPath).not.toBe(first.chunks[0].audioPath);
   });
 
   it("does not reuse audio when voice, rate, or pitch changes", async () => {
@@ -220,21 +221,23 @@ describe("synthesizePartChunks", () => {
         voice: "voice-a",
         rate: "+0%",
         pitch: "+0Hz",
+        maxAttempts: 5,
+        retryDelaysMs: [0],
       },
     );
 
     expect(result.failedCount).toBe(1);
-    expect(tts.synthesize).toHaveBeenCalledTimes(3);
+    expect(tts.synthesize).toHaveBeenCalledTimes(1);
     expect(result.chunks[0]).toMatchObject({
       status: "failed",
-      retryCount: 2,
+      retryCount: 0,
       errorMessage: "fake TTS unavailable",
     });
     await expect(
       context.chunks.findById(result.chunks[0].id),
     ).resolves.toMatchObject({
       status: "failed",
-      retryCount: 2,
+      retryCount: 0,
       errorMessage: "fake TTS unavailable",
     });
   });
@@ -263,6 +266,7 @@ describe("synthesizePartChunks", () => {
         voice: "zh-CN-YunxiNeural",
         rate: "+0%",
         pitch: "+0Hz",
+        retryDelaysMs: [0],
       },
     );
 
@@ -275,6 +279,33 @@ describe("synthesizePartChunks", () => {
           retryCount: 2,
         },
       ],
+    });
+  });
+
+  it("stops retrying retryable TTS errors after the configured attempts", async () => {
+    const context = await createTestContext();
+    const tts = createFakeTts(async () => {
+      throw new Error("No audio was received.");
+    });
+
+    const result = await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "retryable failure.",
+        voice: "zh-CN-YunxiNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+        maxAttempts: 5,
+        retryDelaysMs: [0],
+      },
+    );
+
+    expect(tts.synthesize).toHaveBeenCalledTimes(5);
+    expect(result.chunks[0]).toMatchObject({
+      status: "failed",
+      retryCount: 4,
+      errorMessage: "No audio was received. (after 5 TTS attempts)",
     });
   });
 });
