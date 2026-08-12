@@ -36,6 +36,12 @@ export async function fetchJob(jobId: string): Promise<JobDto> {
     | null;
 
   if (!response.ok) {
+    console.error("[job] request failed", {
+      jobId,
+      status: response.status,
+      code: body?.error?.code,
+      message: body?.error?.message,
+    });
     throw new JobApiError(
       body?.error?.message ?? "Job request failed",
       response.status,

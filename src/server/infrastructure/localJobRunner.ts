@@ -5,7 +5,9 @@ import {
   runPipelineJob,
   type RunPipelineJobDeps,
 } from "../application/runPipelineJob";
+import type { AudioAssembler } from "../ports/audio";
 import type { JobRunner } from "../ports/jobRunner";
+import type { TTSProvider } from "../ports/tts";
 import {
   createDatabaseClient,
   type DatabaseClient,
@@ -13,16 +15,21 @@ import {
 import { initializeDatabase } from "./db/initialize";
 import {
   DrizzleBookRepository,
+  DrizzleChunkRepository,
   DrizzleJobRepository,
   DrizzlePartRepository,
 } from "./db/repositories";
 import { jobs as jobsTable } from "./db/schema";
+import { EdgeTtsProvider } from "./edgeTtsProvider";
+import { FfmpegAudio } from "./ffmpegAudio";
 import { LocalStorage } from "./localStorage";
 
 export type LocalJobRunnerOptions = {
   databasePath?: string;
   storageRoot?: string;
   intervalMs?: number;
+  tts?: TTSProvider;
+  audio?: AudioAssembler;
 };
 
 const DEFAULT_INTERVAL_MS = 1000;
@@ -118,11 +125,18 @@ export function createLocalJobRunner(
   const books = new DrizzleBookRepository(client.db);
   const jobs = new DrizzleJobRepository(client.db);
   const parts = new DrizzlePartRepository(client.db);
+  const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(storageRoot);
+  const tts = options.tts ?? new EdgeTtsProvider({ storage });
+  const audio =
+    options.audio ??
+    new FfmpegAudio({
+      outputDir: path.join(storageRoot, "parts"),
+    });
 
   return new LocalJobRunner(
     client,
-    { books, jobs, parts, storage },
+    { books, jobs, parts, chunks, storage, tts, audio },
     options.intervalMs ?? DEFAULT_INTERVAL_MS,
   );
 }

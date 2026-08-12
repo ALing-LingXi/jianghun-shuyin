@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import type { Book, Chunk, Job, Part } from "@/server/domain/entities";
 import type {
   BookRepository,
@@ -10,6 +10,7 @@ import type {
   CreatePartInput,
   JobRepository,
   PartRepository,
+  UpdatePartInput,
   UpdateJobInput,
   UpdateChunkInput,
 } from "@/server/ports/repositories";
@@ -137,6 +138,37 @@ export class DrizzlePartRepository implements PartRepository {
     const row = this.db.select().from(parts).where(eq(parts.id, id)).get();
     return row ? toPart(row) : null;
   }
+
+  async listByBookId(bookId: string): Promise<Part[]> {
+    return this.db
+      .select()
+      .from(parts)
+      .where(eq(parts.bookId, bookId))
+      .orderBy(asc(parts.index))
+      .all()
+      .map(toPart);
+  }
+
+  async updateById(id: string, input: UpdatePartInput): Promise<Part | null> {
+    const current = await this.findById(id);
+    if (!current) {
+      return null;
+    }
+
+    const updated: Part = {
+      ...current,
+      ...input,
+      audioPath: input.audioPath === undefined ? current.audioPath : input.audioPath,
+      durationSeconds:
+        input.durationSeconds === undefined
+          ? current.durationSeconds
+          : input.durationSeconds,
+      status: input.status ?? current.status,
+    };
+
+    this.db.update(parts).set(updated).where(eq(parts.id, id)).run();
+    return updated;
+  }
 }
 
 export class DrizzleChunkRepository implements ChunkRepository {
@@ -161,6 +193,16 @@ export class DrizzleChunkRepository implements ChunkRepository {
   async findById(id: string): Promise<Chunk | null> {
     const row = this.db.select().from(chunks).where(eq(chunks.id, id)).get();
     return row ? toChunk(row) : null;
+  }
+
+  async listByPartId(partId: string): Promise<Chunk[]> {
+    return this.db
+      .select()
+      .from(chunks)
+      .where(eq(chunks.partId, partId))
+      .orderBy(asc(chunks.index))
+      .all()
+      .map(toChunk);
   }
 
   async findCompletedByTextHash(textHash: string): Promise<Chunk | null> {

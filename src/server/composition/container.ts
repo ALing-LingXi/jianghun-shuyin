@@ -5,12 +5,14 @@ import {
   DrizzleBookRepository,
   DrizzleChunkRepository,
   DrizzleJobRepository,
+  DrizzlePartRepository,
   initializeDatabase,
 } from "@/server/infrastructure/db";
 import { createBookJob } from "@/server/application/createBookJob";
 import { queryJob } from "@/server/application/queryJob";
 import { retryChunk } from "@/server/application/retryChunk";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
+import { FfmpegAudio } from "@/server/infrastructure/ffmpegAudio";
 import { LocalStorage } from "@/server/infrastructure/localStorage";
 
 const defaultDatabasePath = path.join(
@@ -28,9 +30,13 @@ export function createContainer() {
 
   const books = new DrizzleBookRepository(client.db);
   const jobs = new DrizzleJobRepository(client.db);
+  const parts = new DrizzlePartRepository(client.db);
   const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(defaultStorageRoot);
   const ttsProvider = new EdgeTtsProvider({ storage });
+  const audioAssembler = new FfmpegAudio({
+    outputDir: path.join(defaultStorageRoot, "parts"),
+  });
 
   return {
     createBookJob: (input: Parameters<typeof createBookJob>[1]) =>
@@ -38,6 +44,8 @@ export function createContainer() {
     queryJob: (jobId: string) => queryJob({ jobs }, jobId),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
       retryChunk({ chunks, tts: ttsProvider }, input),
+    audioAssembler,
+    parts,
     ttsProvider,
   };
 }

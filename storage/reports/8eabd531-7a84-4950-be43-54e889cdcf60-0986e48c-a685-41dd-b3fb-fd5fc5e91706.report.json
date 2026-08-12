@@ -1,0 +1,75 @@
+{
+  "decode": {
+    "text": "Chapter 1: Wind\nRain fell on the blue stone street.\nThe young man opened the inn door and saw an old friend under the lamp.\n\nChapter 2: Fire\nThe tea had gone cold.\nSomeone outside the window whispered a name.",
+    "encoding": "utf-8",
+    "byteLength": 208,
+    "hadBom": false,
+    "warnings": []
+  },
+  "clean": {
+    "text": "Chapter 1: Wind\nRain fell on the blue stone street.\nThe young man opened the inn door and saw an old friend under the lamp.\n\nChapter 2: Fire\nThe tea had gone cold.\nSomeone outside the window whispered a name.",
+    "originalLength": 208,
+    "cleanedLength": 208,
+    "removedBom": false,
+    "normalizedNewlineCount": 0,
+    "collapsedBlankLineCount": 0,
+    "trimmedBlankLineCount": 0
+  },
+  "chapters": {
+    "chapters": [
+      {
+        "index": 0,
+        "title": "Chapter 1: Wind",
+        "startLine": 0,
+        "endLine": 3,
+        "text": "Chapter 1: Wind\nRain fell on the blue stone street.\nThe young man opened the inn door and saw an old friend under the lamp."
+      },
+      {
+        "index": 1,
+        "title": "Chapter 2: Fire",
+        "startLine": 4,
+        "endLine": 6,
+        "text": "Chapter 2: Fire\nThe tea had gone cold.\nSomeone outside the window whispered a name."
+      }
+    ],
+    "detectedHeadingCount": 2
+  },
+  "plan": {
+    "parts": [
+      {
+        "index": 0,
+        "title": "Chapter 1: Wind",
+        "text": "Chapter 1: Wind\nRain fell on the blue stone street.\nThe young man opened the inn door and saw an old friend under the lamp.",
+        "chapterIndex": 0,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 123,
+        "estimatedDurationSeconds": 25
+      },
+      {
+        "index": 1,
+        "title": "Chapter 2: Fire",
+        "text": "Chapter 2: Fire\nThe tea had gone cold.\nSomeone outside the window whispered a name.",
+        "chapterIndex": 1,
+        "segmentIndex": 0,
+        "segmentCount": 1,
+        "characterCount": 83,
+        "estimatedDurationSeconds": 17
+      }
+    ],
+    "fallbackUsed": false,
+    "maxPartCharacters": 3000,
+    "estimatedCharactersPerSecond": 5
+  },
+  "report": {
+    "encoding": "utf-8",
+    "byteLength": 208,
+    "originalCharacters": 208,
+    "cleanedCharacters": 208,
+    "chapterCount": 2,
+    "partCount": 2,
+    "fallbackUsed": false,
+    "estimatedDurationSeconds": 42,
+    "notices": []
+  }
+}

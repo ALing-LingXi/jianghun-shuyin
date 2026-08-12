@@ -1,10 +1,13 @@
-import type { Job } from "@/server/domain/entities";
+import type { Job, Part } from "@/server/domain/entities";
 import type {
   BookRepository,
+  ChunkRepository,
   JobRepository,
   PartRepository,
 } from "@/server/ports/repositories";
+import type { AudioAssembler } from "@/server/ports/audio";
 import type { FileStorage } from "@/server/ports/storage";
+import type { TTSProvider } from "@/server/ports/tts";
 import {
   buildReport,
   cleanText,
@@ -12,12 +15,21 @@ import {
   detectChapters,
   planParts,
 } from "@/server/pipeline";
+import { synthesizePartChunks } from "@/server/tts/chunkSynthesis";
+import {
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_VOICE,
+} from "@/server/tts/voiceCatalog";
 
 export type RunPipelineJobDeps = {
   books: BookRepository;
   jobs: JobRepository;
   parts: PartRepository;
+  chunks: ChunkRepository;
   storage: FileStorage;
+  tts: TTSProvider;
+  audio: AudioAssembler;
 };
 
 const STAGE_PROGRESS = {
@@ -83,8 +95,13 @@ export async function runPipelineJob(
       return;
     }
 
-    if (job.stage === "tts" || job.stage === "assembling") {
-      await planningStage(deps, job, book.sourcePath);
+    if (job.stage === "tts") {
+      await ttsStage(deps, job, book.sourcePath);
+      return;
+    }
+
+    if (job.stage === "assembling") {
+      await assemblingStage(deps, job);
       return;
     }
 
@@ -160,7 +177,159 @@ async function planningStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
-  const raw = await deps.storage.readTextSource(sourcePath);
+  const parsed = await parseSourceText(deps.storage, sourcePath);
+
+  await deps.storage.saveTextSource({
+    content: JSON.stringify(
+      {
+        decode: parsed.decoded,
+        clean: parsed.cleaned,
+        chapters: parsed.chapters,
+        plan: parsed.plan,
+        report: parsed.report,
+      },
+      null,
+      2,
+    ),
+    fileName: `${job.id}.report.json`,
+    subdirectory: "reports",
+  });
+
+  for (const plannedPart of parsed.plan.parts) {
+    await deps.parts.create({
+      bookId: job.bookId,
+      index: plannedPart.index,
+      title: plannedPart.title,
+      durationSeconds: plannedPart.estimatedDurationSeconds,
+      status: "pending",
+    });
+  }
+
+  await deps.jobs.updateById(job.id, {
+    stage: "tts",
+    progress: STAGE_PROGRESS.tts,
+    errorMessage: null,
+  });
+}
+
+async function ttsStage(
+  deps: RunPipelineJobDeps,
+  job: Job,
+  sourcePath: string,
+): Promise<void> {
+  const parsed = await parseSourceText(deps.storage, sourcePath);
+  const parts = await deps.parts.listByBookId(job.bookId);
+
+  for (const plannedPart of parsed.plan.parts) {
+    const part = parts.find((candidate) => candidate.index === plannedPart.index);
+    if (!part) {
+      throw new Error(`Part ${plannedPart.index} not found for book ${job.bookId}`);
+    }
+
+    await deps.parts.updateById(part.id, {
+      status: "processing",
+      audioPath: null,
+      durationSeconds: null,
+    });
+
+    const result = await synthesizePartChunks(
+      {
+        chunks: deps.chunks,
+        tts: deps.tts,
+      },
+      {
+        partId: part.id,
+        text: plannedPart.text,
+        voice: DEFAULT_TTS_VOICE,
+        rate: DEFAULT_TTS_RATE,
+        pitch: DEFAULT_TTS_PITCH,
+      },
+    );
+
+    if (result.failedCount > 0) {
+      await deps.parts.updateById(part.id, { status: "failed" });
+      throw new Error(`TTS failed for part ${part.index}`);
+    }
+  }
+
+  await deps.jobs.updateById(job.id, {
+    stage: "assembling",
+    progress: STAGE_PROGRESS.assembling,
+    errorMessage: null,
+  });
+}
+
+async function assemblingStage(
+  deps: RunPipelineJobDeps,
+  job: Job,
+): Promise<void> {
+  const parts = await deps.parts.listByBookId(job.bookId);
+
+  if (parts.length === 0) {
+    throw new Error(`No parts found for book ${job.bookId}`);
+  }
+
+  for (const part of parts) {
+    await assemblePart(deps, part);
+  }
+
+  await deps.jobs.updateById(job.id, {
+    status: "completed",
+    stage: "completed",
+    progress: STAGE_PROGRESS.completed,
+    errorMessage: null,
+  });
+}
+
+async function assemblePart(
+  deps: RunPipelineJobDeps,
+  part: Part,
+): Promise<void> {
+  await deps.parts.updateById(part.id, { status: "processing" });
+  const chunks = await deps.chunks.listByPartId(part.id);
+
+  if (chunks.length === 0) {
+    await deps.parts.updateById(part.id, { status: "failed" });
+    throw new Error(`Part ${part.index} has no chunks to assemble`);
+  }
+
+  const incompleteChunk = chunks.find(
+    (chunk) => chunk.status !== "completed" || !chunk.audioPath,
+  );
+  if (incompleteChunk) {
+    await deps.parts.updateById(part.id, { status: "failed" });
+    throw new Error(`Part ${part.index} has incomplete chunk ${incompleteChunk.id}`);
+  }
+
+  try {
+    const assembled = await deps.audio.assemblePart({
+      partId: part.id,
+      chunkAudioPaths: chunks.map((chunk) => chunk.audioPath!),
+      fileName: `${part.id}.mp3`,
+    });
+
+    await deps.parts.updateById(part.id, {
+      audioPath: assembled.audioPath,
+      durationSeconds: assembled.durationSeconds,
+      status: "completed",
+    });
+  } catch (error) {
+    await deps.parts.updateById(part.id, { status: "failed" });
+    throw error;
+  }
+}
+
+async function parseSourceText(
+  storage: FileStorage,
+  sourcePath: string,
+): Promise<{
+  decoded: ReturnType<typeof decodeText>;
+  cleaned: ReturnType<typeof cleanText>;
+  chapters: ReturnType<typeof detectChapters>;
+  plan: ReturnType<typeof planParts>;
+  report: ReturnType<typeof buildReport>;
+}> {
+  const raw = await storage.readTextSource(sourcePath);
   const decoded = decodeText(raw);
   const cleaned = cleanText(decoded.text);
   const chapters = detectChapters(cleaned.text);
@@ -172,38 +341,13 @@ async function planningStage(
     plan,
   });
 
-  await deps.storage.saveTextSource({
-    content: JSON.stringify(
-      {
-        decode: decoded,
-        clean: cleaned,
-        chapters,
-        plan,
-        report,
-      },
-      null,
-      2,
-    ),
-    fileName: `${job.id}.report.json`,
-    subdirectory: "reports",
-  });
-
-  for (const plannedPart of plan.parts) {
-    await deps.parts.create({
-      bookId: job.bookId,
-      index: plannedPart.index,
-      title: plannedPart.title,
-      durationSeconds: plannedPart.estimatedDurationSeconds,
-      status: "pending",
-    });
-  }
-
-  await deps.jobs.updateById(job.id, {
-    status: "completed",
-    stage: "completed",
-    progress: STAGE_PROGRESS.completed,
-    errorMessage: null,
-  });
+  return {
+    decoded,
+    cleaned,
+    chapters,
+    plan,
+    report,
+  };
 }
 
 async function failJob(

@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { AudioAssembler } from "../src/server/ports/audio";
+import type { TTSProvider } from "../src/server/ports/tts";
 import { createBookJob } from "../src/server/application/createBookJob";
 import {
   createDatabaseClient,
@@ -52,14 +54,19 @@ describe("LocalJobRunner", () => {
     const result = await createBookJob(
       { books, jobs, storage },
       {
-        title: "三体",
-        text: "第一章 开始\n这是正文。",
+        title: "Worker test",
+        text: "Chapter 1 Start\nThis is body text.",
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",
       },
     );
-    const runner = createLocalJobRunner({ databasePath, storageRoot });
+    const runner = createLocalJobRunner({
+      databasePath,
+      storageRoot,
+      tts: createFakeTts(),
+      audio: createFakeAudio(),
+    });
     runners.push(runner);
 
     await expect(runner.runOnce()).resolves.toBe(1);
@@ -80,3 +87,34 @@ describe("LocalJobRunner", () => {
     });
   });
 });
+
+function createFakeTts(): TTSProvider {
+  return {
+    async synthesize(input) {
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    },
+  };
+}
+
+function createFakeAudio(): AudioAssembler {
+  return {
+    async checkAvailable() {
+      return undefined;
+    },
+    async assemblePart(input) {
+      return {
+        audioPath: `storage/parts/${input.fileName}`,
+        durationSeconds: 12,
+      };
+    },
+    async readDurationSeconds() {
+      return 12;
+    },
+  };
+}

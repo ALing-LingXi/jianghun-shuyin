@@ -49,9 +49,17 @@ export type CreatePartInput = {
   status?: PartStatus;
 };
 
+export type UpdatePartInput = {
+  audioPath?: string | null;
+  durationSeconds?: number | null;
+  status?: PartStatus;
+};
+
 export interface PartRepository {
   create(input: CreatePartInput): Promise<Part>;
   findById(id: string): Promise<Part | null>;
+  listByBookId(bookId: string): Promise<Part[]>;
+  updateById(id: string, input: UpdatePartInput): Promise<Part | null>;
 }
 
 export type CreateChunkInput = {
@@ -74,6 +82,7 @@ export type UpdateChunkInput = {
 export interface ChunkRepository {
   create(input: CreateChunkInput): Promise<Chunk>;
   findById(id: string): Promise<Chunk | null>;
+  listByPartId(partId: string): Promise<Chunk[]>;
   findCompletedByTextHash(textHash: string): Promise<Chunk | null>;
   updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null>;
 }
