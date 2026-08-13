@@ -1,7 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import {
+  CircleAlert,
+  Headphones,
+  Library,
+  LoaderCircle,
+  ScrollText,
+} from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DemonPageHeader } from "@/features/ui/demon-page-header";
 import { JobStatusPanel } from "./components/job-status-panel";
 import { JobApiError, useJobPolling } from "./hooks/useJobPolling";
 
@@ -10,20 +19,31 @@ function JobPageContent({ jobId }: { jobId: string }) {
 
   if (query.isPending) {
     return (
-      <p className="text-sm text-stone-600" data-testid="job-loading">
+      <div
+        className="demon-panel flex min-h-48 items-center justify-center gap-3 p-6 text-sm text-fuchsia-100/70"
+        data-testid="job-loading"
+      >
+        <LoaderCircle
+          className="size-5 animate-spin text-fuchsia-300"
+          aria-hidden="true"
+        />
         加载任务中...
-      </p>
+      </div>
     );
   }
 
   if (query.isError) {
     const error = query.error as JobApiError;
     return (
-      <div className="grid gap-3" data-testid="job-error">
-        <p className="text-sm font-medium text-red-700">
+      <div
+        className="demon-panel grid min-h-48 place-content-center gap-3 border-red-300/35 p-6 text-center"
+        data-testid="job-error"
+      >
+        <CircleAlert className="mx-auto size-7 text-red-300" aria-hidden="true" />
+        <p className="font-bold text-red-100">
           {error.status === 404 ? "任务不存在" : "任务加载失败"}
         </p>
-        <p className="text-sm text-stone-600">{error.message}</p>
+        <p className="text-sm text-red-200/75">{error.message}</p>
       </div>
     );
   }
@@ -36,17 +56,26 @@ export function JobPage({ jobId }: { jobId: string }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <main className="min-h-screen px-6 py-12">
-        <section className="mx-auto w-full max-w-3xl border border-stone-300 bg-white/80 p-8 shadow-sm sm:p-10">
-          <div className="mb-8">
-            <p className="text-sm font-semibold tracking-[0.18em] text-amber-700 uppercase">
-              任务
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-900">
-              任务状态
-            </h1>
-          </div>
-
+      <main className="demon-page">
+        <section className="demon-page-inner grid gap-5">
+          <DemonPageHeader
+            eyebrow="Soul Process"
+            title="任务状态"
+            description="追踪章节识别、语音生成与音频拼接。已完成章节会立即进入播放器，无需等待整本结束。"
+            icon={ScrollText}
+            actions={
+              <>
+                <Link className="demon-button-secondary" href="/books">
+                  <Library className="size-4" aria-hidden="true" />
+                  书架
+                </Link>
+                <Link className="demon-button-primary" href="/books">
+                  <Headphones className="size-4" aria-hidden="true" />
+                  可听章节
+                </Link>
+              </>
+            }
+          />
           <JobPageContent jobId={jobId} />
         </section>
       </main>

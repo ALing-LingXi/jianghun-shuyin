@@ -46,3 +46,7 @@ export type PartStatus = (typeof PART_STATUSES)[number];
 export const CHUNK_STATUSES = ["pending", "processing", "completed", "failed"] as const;
 
 export type ChunkStatus = (typeof CHUNK_STATUSES)[number];
+
+export const READING_BOOK_STATUSES = ["ready", "failed"] as const;
+
+export type ReadingBookStatus = (typeof READING_BOOK_STATUSES)[number];

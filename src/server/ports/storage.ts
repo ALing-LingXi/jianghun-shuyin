@@ -14,6 +14,7 @@ export interface FileStorage {
   saveTextSource(input: StoreTextInput): Promise<string>;
   saveBinarySource(input: StoreBinaryInput): Promise<string>;
   readTextSource(sourcePath: string): Promise<Uint8Array>;
+  readBinaryFile(filePath: string): Promise<Uint8Array | null>;
   saveChunkAudio(input: StoreBinaryInput): Promise<string>;
   listFiles(subdirectory: string): Promise<string[]>;
   deleteFile(filePath: string): Promise<void>;

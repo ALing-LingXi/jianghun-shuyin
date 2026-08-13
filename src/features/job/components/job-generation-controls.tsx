@@ -28,7 +28,7 @@ export function JobGenerationControls({
     <div className="inline-grid w-fit gap-2">
       <button
         type="button"
-        className="w-fit rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-stone-100 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:text-stone-500"
+        className="inline-flex min-h-8 w-fit items-center border border-fuchsia-200/20 bg-white/[0.06] px-2.5 py-1 text-xs font-bold text-fuchsia-50 transition hover:bg-fuchsia-400/10 disabled:cursor-not-allowed disabled:text-stone-500"
         disabled={controls.isPending}
         onClick={() => controls.mutate(action)}
       >

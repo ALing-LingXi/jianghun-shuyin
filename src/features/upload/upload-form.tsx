@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, FileText, Search } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  FileText,
+  Search,
+  Sparkles,
+  Type,
+  Upload,
+} from "lucide-react";
 import {
   uploadFileSchema,
   uploadTextSchema,
@@ -235,29 +243,31 @@ export function UploadForm() {
     >
       <fieldset disabled={isSubmitting}>
         <legend className="sr-only">上传方式</legend>
-        <div className="grid grid-cols-2 border border-stone-300 bg-stone-100 p-1 text-sm font-medium">
+        <div className="grid grid-cols-2 gap-1 border border-fuchsia-300/20 bg-black/25 p-1 text-sm font-bold">
           <button
             type="button"
-            className={`px-3 py-2 ${
+            className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 transition ${
               mode === "text"
-                ? "bg-white text-stone-900 shadow-sm"
-                : "text-stone-600"
+                ? "bg-fuchsia-500/25 text-white shadow-[inset_0_0_18px_rgba(242,42,162,0.15)]"
+                : "text-fuchsia-100/60 hover:bg-white/5 hover:text-white"
             }`}
             aria-pressed={mode === "text"}
             onClick={() => changeMode("text")}
           >
+            <Type className="size-4" aria-hidden="true" />
             粘贴文本
           </button>
           <button
             type="button"
-            className={`px-3 py-2 ${
+            className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 transition ${
               mode === "file"
-                ? "bg-white text-stone-900 shadow-sm"
-                : "text-stone-600"
+                ? "bg-fuchsia-500/25 text-white shadow-[inset_0_0_18px_rgba(242,42,162,0.15)]"
+                : "text-fuchsia-100/60 hover:bg-white/5 hover:text-white"
             }`}
             aria-pressed={mode === "file"}
             onClick={() => changeMode("file")}
           >
+            <Upload className="size-4" aria-hidden="true" />
             选择 TXT
           </button>
         </div>
@@ -266,10 +276,10 @@ export function UploadForm() {
       {mode === "file" ? (
         <div className="grid gap-3">
           <label
-            className="grid cursor-pointer gap-2 border border-dashed border-stone-400 bg-stone-50 p-5 text-sm text-stone-700 transition-colors hover:border-stone-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="grid cursor-pointer gap-3 border border-dashed border-fuchsia-200/35 bg-black/25 p-5 text-sm text-fuchsia-100/70 transition hover:border-fuchsia-200/70 hover:bg-fuchsia-400/5 disabled:cursor-not-allowed disabled:opacity-60"
             htmlFor="upload-file"
           >
-            <span className="flex items-center gap-2 font-medium text-stone-900">
+            <span className="flex items-center gap-2 font-bold text-white">
               <FileText className="size-4" aria-hidden="true" />
               选择小说 TXT 文件
             </span>
@@ -279,7 +289,7 @@ export function UploadForm() {
               name="file"
               type="file"
               accept=".txt,text/plain"
-              className="block w-full text-sm text-stone-700 file:mr-3 file:border-0 file:bg-stone-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white"
+              className="block w-full text-sm text-fuchsia-100/70 file:mr-3 file:border-0 file:bg-fuchsia-600 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
               disabled={isSubmitting}
               required={mode === "file"}
               onChange={(event) =>
@@ -288,18 +298,18 @@ export function UploadForm() {
             />
           </label>
           {file ? (
-            <p className="text-sm text-stone-600">
+            <p className="text-sm text-amber-100">
               已选择：{file.name} ({formatFileSize(file.size)})
             </p>
           ) : null}
         </div>
       ) : (
         <label className="grid gap-2" htmlFor="upload-text">
-          <span className="text-sm font-medium text-stone-700">正文</span>
+          <span className="text-sm font-bold text-fuchsia-50">正文</span>
           <textarea
             id="upload-text"
             name="text"
-            className="min-h-64 border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="demon-input min-h-72 resize-y text-sm leading-7"
             value={text}
             onChange={(event) => setText(event.target.value)}
             disabled={isSubmitting}
@@ -310,11 +320,11 @@ export function UploadForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-2" htmlFor="upload-title">
-          <span className="text-sm font-medium text-stone-700">书名</span>
+          <span className="text-sm font-bold text-fuchsia-50">书名</span>
           <input
             id="upload-title"
             name="title"
-            className="border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="demon-input text-sm"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             disabled={isSubmitting}
@@ -323,11 +333,11 @@ export function UploadForm() {
         </label>
 
         <label className="grid gap-2" htmlFor="upload-author">
-          <span className="text-sm font-medium text-stone-700">作者</span>
+          <span className="text-sm font-bold text-fuchsia-50">作者</span>
           <input
             id="upload-author"
             name="author"
-            className="border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="demon-input text-sm"
             value={author}
             onChange={(event) => setAuthor(event.target.value)}
             disabled={isSubmitting}
@@ -339,7 +349,7 @@ export function UploadForm() {
         <div className="grid min-w-0 gap-2">
           <span
             id="upload-voice-label"
-            className="text-sm font-medium text-stone-700"
+            className="text-sm font-bold text-fuchsia-50"
           >
             音色
           </span>
@@ -347,7 +357,7 @@ export function UploadForm() {
             <button
               id="upload-voice"
               type="button"
-              className="flex min-w-0 max-w-full items-center justify-between border border-stone-300 bg-white px-3 py-2 text-left text-sm text-stone-900 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-stone-100"
+              className="demon-input flex max-w-full items-center justify-between text-left text-sm"
               aria-labelledby="upload-voice-label upload-voice"
               aria-expanded={isVoiceMenuOpen}
               aria-haspopup="listbox"
@@ -362,19 +372,19 @@ export function UploadForm() {
 
             {isVoiceMenuOpen ? (
               <div
-                className="absolute z-20 mt-1 w-full min-w-0 overflow-hidden border border-stone-300 bg-white shadow-lg"
+                className="absolute z-20 mt-1 w-full min-w-0 overflow-hidden border border-fuchsia-200/30 bg-[#170011] shadow-2xl shadow-black"
                 role="listbox"
                 aria-labelledby="upload-voice-label"
               >
-                <label className="flex items-center gap-2 border-b border-stone-200 px-2 py-2">
+                <label className="flex items-center gap-2 border-b border-fuchsia-200/15 px-2 py-2">
                   <Search
-                    className="size-4 shrink-0 text-stone-500"
+                    className="size-4 shrink-0 text-fuchsia-200/55"
                     aria-hidden="true"
                   />
                   <input
                     autoFocus
                     aria-label="搜索音色"
-                    className="min-w-0 flex-1 bg-transparent text-sm text-stone-900 outline-none"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-fuchsia-100/35"
                     value={voiceQuery}
                     onChange={(event) => setVoiceQuery(event.target.value)}
                     placeholder="搜索音色"
@@ -389,7 +399,7 @@ export function UploadForm() {
                       <button
                         key={option.id}
                         type="button"
-                        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm text-stone-900 hover:bg-stone-100"
+                        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm text-fuchsia-50 hover:bg-fuchsia-500/15"
                         role="option"
                         aria-selected={isSelected}
                         disabled={isSubmitting}
@@ -408,14 +418,14 @@ export function UploadForm() {
                         <span className="min-w-0 flex-1 truncate">
                           {option.label}
                         </span>
-                        <span className="shrink-0 text-xs text-stone-500">
+                        <span className="shrink-0 text-xs text-fuchsia-100/45">
                           {voiceMetaLabel(option)}
                         </span>
                       </button>
                     );
                   })}
                   {filteredVoices.length === 0 ? (
-                    <p className="px-3 py-2 text-sm text-stone-500">
+                    <p className="px-3 py-2 text-sm text-fuchsia-100/50">
                       没有匹配的音色。
                     </p>
                   ) : null}
@@ -426,11 +436,11 @@ export function UploadForm() {
         </div>
 
         <label className="grid min-w-0 gap-2" htmlFor="upload-rate">
-          <span className="text-sm font-medium text-stone-700">语速</span>
+          <span className="text-sm font-bold text-fuchsia-50">语速</span>
           <input
             id="upload-rate"
             name="rate"
-            className="border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="demon-input text-sm"
             value={rate}
             onChange={(event) => setRate(event.target.value)}
             disabled={isSubmitting}
@@ -438,11 +448,11 @@ export function UploadForm() {
         </label>
 
         <label className="grid min-w-0 gap-2" htmlFor="upload-pitch">
-          <span className="text-sm font-medium text-stone-700">音调</span>
+          <span className="text-sm font-bold text-fuchsia-50">音调</span>
           <input
             id="upload-pitch"
             name="pitch"
-            className="border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-stone-500 disabled:bg-stone-100"
+            className="demon-input text-sm"
             value={pitch}
             onChange={(event) => setPitch(event.target.value)}
             disabled={isSubmitting}
@@ -451,16 +461,20 @@ export function UploadForm() {
       </div>
 
       {state.status === "error" ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p
+          className="border border-red-300/30 bg-red-950/50 px-3 py-2 text-sm text-red-100"
+          role="alert"
+        >
           {state.message}
         </p>
       ) : null}
 
       <button
         type="submit"
-        className="w-fit border border-stone-900 bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-stone-500"
+        className="demon-button-primary w-fit"
         disabled={isSubmitDisabled}
       >
+        <Sparkles className="size-4" aria-hidden="true" />
         {isSubmitting
           ? "正在创建任务..."
           : mode === "file"

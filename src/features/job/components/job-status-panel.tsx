@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import {
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  LoaderCircle,
+  PauseCircle,
+} from "lucide-react";
 import type { JobDto } from "@/shared/schemas/job";
 import { JobGenerationControls } from "./job-generation-controls";
 
@@ -31,54 +38,75 @@ export function JobStatusPanel({ job }: { job: JobDto }) {
     }
   }, [job]);
 
-  return (
-    <div className="grid gap-5">
-      <JobGenerationControls job={job} />
+  const completedParts = job.parts.filter(
+    (part) => part.status === "completed",
+  ).length;
+  const failedParts = job.parts.filter((part) => part.status === "failed").length;
 
-      <dl className="grid gap-4 rounded border border-stone-200 bg-white p-6">
-        <div>
-          <dt className="text-sm text-stone-500">Status</dt>
-          <dd className="mt-1 text-lg font-semibold text-stone-900">
-            {job.status}
-          </dd>
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.75fr)_minmax(24rem,1.25fr)]">
+      <section className="demon-panel grid content-start gap-5 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="demon-eyebrow">Current Ritual</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">
+              {jobStatusLabel(job.status)}
+            </h2>
+            <p className="mt-1 text-sm text-fuchsia-100/55">
+              当前阶段：{stageLabel(job.stage)}
+            </p>
+          </div>
+          <JobGenerationControls job={job} />
         </div>
-        <div>
-          <dt className="text-sm text-stone-500">Stage</dt>
-          <dd className="mt-1 text-lg font-semibold text-stone-900">
-            {job.stage}
-          </dd>
+
+        <div className="grid grid-cols-3 gap-2">
+          <JobMetric label="进度" value={`${job.progress}%`} />
+          <JobMetric label="已完成" value={`${completedParts}`} />
+          <JobMetric label="失败" value={`${failedParts}`} />
         </div>
+
         <div>
-          <dt className="text-sm text-stone-500">Progress</dt>
-          <dd className="mt-1 text-lg font-semibold text-stone-900">
-            {job.progress}%
-          </dd>
-          <div className="mt-3 h-2 overflow-hidden rounded bg-stone-100">
+          <div className="mb-2 flex items-center justify-between text-xs font-bold text-fuchsia-100/55">
+            <span>{stageLabel(job.stage)}</span>
+            <span>{job.progress}%</span>
+          </div>
+          <div className="h-3 overflow-hidden border border-fuchsia-200/15 bg-black/35 p-0.5">
             <div
-              className="h-full bg-amber-600 transition-all"
+              className="h-full bg-fuchsia-400 shadow-[0_0_18px_rgba(244,58,173,0.75)] transition-all"
               style={{ width: `${job.progress}%` }}
             />
           </div>
         </div>
+
         {job.errorMessage ? (
-          <div>
-            <dt className="text-sm text-stone-500">Error</dt>
-            <dd className="mt-1 text-sm leading-6 text-red-700">
+          <div className="grid gap-3 border border-red-300/25 bg-red-950/35 p-4">
+            <div className="flex items-center gap-2 font-bold text-red-100">
+              <CircleAlert className="size-4" aria-hidden="true" />
+              诊断信息
+            </div>
+            <p className="text-sm leading-6 text-red-100">
               {job.errorMessage}
-            </dd>
-            <dd className="mt-3 grid gap-1 border-l-2 border-red-200 pl-3 text-sm leading-6 text-stone-600">
+            </p>
+            <div className="grid gap-1 border-l-2 border-red-300/30 pl-3 text-xs leading-5 text-fuchsia-100/60">
               {failureDiagnostics(job.stage).map((item) => (
                 <span key={item}>{item}</span>
               ))}
-            </dd>
+            </div>
           </div>
-        ) : null}
-      </dl>
+        ) : (
+          <p className="border border-fuchsia-200/10 bg-black/20 p-3 text-xs leading-5 text-fuchsia-100/55">
+            Worker 会在章节边界持续推进。暂停采用软暂停，当前正在执行的小步骤完成后停止进入下一章。
+          </p>
+        )}
+      </section>
 
-      <section className="grid gap-3 rounded border border-stone-200 bg-white p-6">
+      <section className="demon-panel grid min-h-0 gap-4 p-5 sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-stone-900">Chapters</h2>
-          <p className="text-sm text-stone-500">
+          <div>
+            <p className="demon-eyebrow">Chapter Queue</p>
+            <h2 className="mt-2 text-xl font-bold text-white">章节炼制队列</h2>
+          </div>
+          <p className="text-sm text-fuchsia-100/45">
             {job.parts.length > 0
               ? `${job.parts.length} planned`
               : "Waiting for chapter detection"}
@@ -86,32 +114,106 @@ export function JobStatusPanel({ job }: { job: JobDto }) {
         </div>
 
         {job.parts.length > 0 ? (
-          <ol className="grid gap-2" data-testid="job-chapter-list">
+          <ol
+            className="pretty-scrollbar grid max-h-[34rem] gap-2 overflow-y-auto pr-2"
+            data-testid="job-chapter-list"
+          >
             {job.parts.map((part) => (
               <li
                 key={part.id}
-                className="flex min-w-0 items-center justify-between gap-3 border border-stone-100 px-3 py-2 text-sm"
+                className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border border-fuchsia-200/10 bg-black/20 px-3 py-2.5 text-sm"
               >
+                <span className="grid size-8 place-items-center border border-fuchsia-200/20 bg-fuchsia-500/10 text-xs font-bold text-fuchsia-100">
+                  {part.index + 1}
+                </span>
                 <span
-                  className="min-w-0 flex-1 truncate font-medium text-stone-900"
+                  className="min-w-0 truncate font-bold text-fuchsia-50"
                   title={part.title}
                 >
-                  {part.index + 1}. {part.title}
+                  {part.title}
                 </span>
-                <span className="shrink-0 text-xs text-stone-500">
+                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-fuchsia-100/55">
+                  <PartStatusIcon status={part.status} />
                   {partStatusLabel(part.status)}
                 </span>
               </li>
             ))}
           </ol>
         ) : (
-          <p className="text-sm text-stone-600">
+          <p className="grid min-h-40 place-items-center border border-dashed border-fuchsia-200/15 text-sm text-fuchsia-100/50">
             Chapter titles will appear here after planning starts.
           </p>
         )}
       </section>
     </div>
   );
+}
+
+function JobMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="border border-fuchsia-200/10 bg-black/25 px-3 py-3">
+      <span className="block text-xs text-fuchsia-100/35">{label}</span>
+      <span className="mt-1 block text-lg font-bold text-white">{value}</span>
+    </span>
+  );
+}
+
+function PartStatusIcon({ status }: { status: JobDto["parts"][number]["status"] }) {
+  if (status === "completed") {
+    return <CheckCircle2 className="size-3.5 text-emerald-300" aria-hidden="true" />;
+  }
+
+  if (status === "failed") {
+    return <CircleAlert className="size-3.5 text-red-300" aria-hidden="true" />;
+  }
+
+  if (status === "cancelled") {
+    return <PauseCircle className="size-3.5 text-stone-400" aria-hidden="true" />;
+  }
+
+  if (status === "pending") {
+    return <Clock3 className="size-3.5 text-fuchsia-200/50" aria-hidden="true" />;
+  }
+
+  return <LoaderCircle className="size-3.5 text-amber-200" aria-hidden="true" />;
+}
+
+function jobStatusLabel(status: JobDto["status"]): string {
+  switch (status) {
+    case "queued":
+      return "等待启动";
+    case "processing":
+      return "正在生成";
+    case "paused":
+      return "已暂停";
+    case "completed":
+      return "全部完成";
+    case "completed_with_errors":
+      return "部分章节完成";
+    case "failed":
+      return "任务失败";
+    case "cancelled":
+      return "任务已取消";
+  }
+}
+
+function stageLabel(stage: JobDto["stage"]): string {
+  switch (stage) {
+    case "decoding":
+      return "文本解码";
+    case "cleaning":
+      return "正文清洗";
+    case "chapter_detection":
+      return "章节识别";
+    case "planning":
+      return "章节规划";
+    case "tts":
+      return "语音生成";
+    case "assembling":
+      return "音频拼接";
+    case "completed":
+      return "完成";
+  }
 }
 
 function partStatusLabel(status: JobDto["parts"][number]["status"]): string {

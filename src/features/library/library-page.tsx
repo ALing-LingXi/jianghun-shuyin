@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -16,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DemonPageHeader } from "@/features/ui/demon-page-header";
 import type { LibraryBookDto } from "@/shared/schemas/library";
 import {
   LibraryApiError,
@@ -28,19 +30,19 @@ function LibraryPageContent() {
 
   if (query.isPending) {
     return (
-      <div className="grid gap-4 rounded-lg border border-white/10 bg-white/[0.06] p-6 text-sm text-stone-300 shadow-2xl shadow-black/20">
+      <div className="demon-panel grid gap-4 p-6 text-sm text-fuchsia-100/70">
         <div className="flex items-center gap-3">
           <LoaderCircle
-            className="h-5 w-5 animate-spin text-red-300"
+            className="size-5 animate-spin text-fuchsia-300"
             aria-hidden="true"
           />
-          <p className="font-medium text-stone-100">Loading library...</p>
+          <p className="font-bold text-white">Loading library...</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3" aria-hidden="true">
-          {[0, 1, 2].map((item) => (
+        <div className="grid gap-3 sm:grid-cols-2" aria-hidden="true">
+          {[0, 1, 2, 3].map((item) => (
             <div
               key={item}
-              className="h-32 rounded-lg border border-white/10 bg-white/[0.04]"
+              className="h-36 border border-fuchsia-200/10 bg-white/[0.04]"
             />
           ))}
         </div>
@@ -51,18 +53,18 @@ function LibraryPageContent() {
   if (query.isError) {
     const error = query.error as LibraryApiError;
     return (
-      <div className="grid gap-4 rounded-lg border border-red-300/30 bg-red-950/40 p-6 text-sm shadow-2xl shadow-black/20">
+      <div className="demon-panel grid gap-4 border-red-300/35 p-6 text-sm">
         <div className="flex items-center gap-3">
-          <CircleAlert className="h-5 w-5 text-red-300" aria-hidden="true" />
-          <p className="font-medium text-red-100">Library failed to load</p>
+          <CircleAlert className="size-5 text-red-300" aria-hidden="true" />
+          <p className="font-bold text-red-100">Library failed to load</p>
         </div>
         <p className="text-red-200">{error.message}</p>
         <button
           type="button"
-          className="flex w-fit items-center gap-2 rounded-lg border border-red-200/30 bg-white/10 px-3 py-2 font-medium text-red-50 transition hover:bg-white/15"
+          className="demon-button-secondary w-fit"
           onClick={() => void query.refetch()}
         >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          <RefreshCw className="size-4" aria-hidden="true" />
           Retry
         </button>
       </div>
@@ -71,22 +73,22 @@ function LibraryPageContent() {
 
   if (query.data.books.length === 0) {
     return (
-      <div className="grid gap-5 rounded-lg border border-white/10 bg-white/[0.06] p-8 text-sm text-stone-300 shadow-2xl shadow-black/20">
-        <div className="grid h-16 w-16 place-items-center rounded-lg border border-red-300/20 bg-red-500/10 text-red-200">
-          <Library className="h-7 w-7" aria-hidden="true" />
+      <div className="demon-panel grid min-h-80 place-items-center p-8 text-center">
+        <div className="grid max-w-md justify-items-center gap-4">
+          <div className="grid size-16 place-items-center border border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-200">
+            <Library className="size-7" aria-hidden="true" />
+          </div>
+          <div className="grid gap-2">
+            <p className="text-xl font-bold text-white">No books yet</p>
+            <p className="text-sm leading-6 text-fuchsia-100/65">
+              Create a text upload to start building your local audiobook
+              library.
+            </p>
+          </div>
+          <Link className="demon-button-primary" href="/upload">
+            Upload text
+          </Link>
         </div>
-        <div className="grid gap-2">
-          <p className="text-xl font-semibold text-stone-50">No books yet</p>
-          <p>
-            Create a text upload to start building your local audiobook library.
-          </p>
-        </div>
-        <Link
-          className="w-fit rounded-lg border border-red-300/30 bg-red-500 px-4 py-2 font-medium text-white shadow-lg shadow-red-950/30 transition hover:bg-red-400"
-          href="/upload"
-        >
-          Upload text
-        </Link>
       </div>
     );
   }
@@ -118,13 +120,20 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
   }
 
   return (
-    <li className="grid min-w-0 gap-5 rounded-lg border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-black/15 ring-1 ring-white/[0.03] transition hover:border-red-300/30 hover:bg-white/[0.09] sm:p-5">
+    <li className="demon-panel group grid min-w-0 gap-5 p-4 transition hover:border-fuchsia-300/60 sm:p-5">
       <div className="grid min-w-0 gap-4 sm:grid-cols-[5rem_1fr]">
-        <div className="relative h-24 w-20 overflow-hidden rounded-lg border border-red-200/20 bg-gradient-to-br from-red-500 via-stone-900 to-black shadow-xl shadow-black/30">
-          <div className="absolute inset-y-3 left-3 w-px bg-white/20" />
-          <div className="absolute right-3 bottom-3 left-5 h-8 rounded bg-white/10" />
+        <div className="relative h-24 w-20 overflow-hidden border-2 border-fuchsia-200/25 bg-[#210019] shadow-[4px_4px_0_#59043b]">
+          <Image
+            className="object-cover opacity-70 transition duration-300 group-hover:scale-105 group-hover:opacity-90"
+            src="/assets/images/恶魔勇士/qS68JI.gif"
+            alt=""
+            fill
+            sizes="80px"
+            unoptimized
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#1a0012] via-transparent to-transparent" />
           <BookOpen
-            className="absolute top-4 right-4 h-5 w-5 text-red-100"
+            className="absolute right-3 bottom-3 size-5 text-fuchsia-100"
             aria-hidden="true"
           />
         </div>
@@ -134,42 +143,45 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
             <StatusPill status={book.status} />
             {latestJob ? <JobPill status={latestJob.status} /> : null}
           </div>
-          <h2 className="mt-3 truncate text-lg font-semibold text-stone-50">
+          <h2 className="mt-3 truncate text-lg font-bold text-white">
             {book.title}
           </h2>
-          <p className="mt-1 truncate text-sm text-stone-400">
-            {book.author ?? "Unknown author"} - Created{" "}
+          <p className="mt-1 truncate text-sm text-fuchsia-100/50">
+            {book.author ?? "Unknown author"} ·{" "}
             {new Date(book.createdAt).toLocaleString("zh-CN")}
           </p>
 
-          <div className="mt-4 grid gap-2 text-sm text-stone-300 sm:grid-cols-3">
+          <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
             <Metric
               label="Playable"
               value={`${book.playablePartCount}/${book.partCount}`}
             />
-            <Metric label="Duration" value={formatDuration(book.durationSeconds)} />
+            <Metric
+              label="Duration"
+              value={formatDuration(book.durationSeconds)}
+            />
             <Metric
               label="Progress"
               value={latestJob ? `${latestJob.progress}%` : "No job"}
             />
           </div>
 
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-4 h-1.5 overflow-hidden bg-white/10">
             <div
-              className="h-full rounded-full bg-red-400"
+              className="h-full bg-fuchsia-400 shadow-[0_0_14px_rgba(244,58,173,0.7)]"
               style={{ width: `${completionPercent(book)}%` }}
               aria-hidden="true"
             />
           </div>
 
           {latestJob ? (
-            <p className="mt-3 text-sm text-stone-400">
-              Latest job: {latestJob.status} - {latestJob.stage} -{" "}
+            <p className="mt-3 text-xs text-fuchsia-100/45">
+              Latest job: {latestJob.status} · {latestJob.stage} ·{" "}
               {latestJob.progress}%
             </p>
           ) : null}
           {deleteBook.isError ? (
-            <p className="mt-3 text-sm font-medium text-red-200" role="alert">
+            <p className="mt-3 text-sm font-bold text-red-200" role="alert">
               Delete failed: {deleteBook.error.message}
             </p>
           ) : null}
@@ -179,22 +191,22 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
       <div className="flex flex-wrap gap-2">
         <Link
           aria-disabled={!canPlay}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+          className={
             canPlay
-              ? "border-red-300/30 bg-red-500 text-white shadow-lg shadow-red-950/30 hover:bg-red-400"
-              : "pointer-events-none border-white/10 text-stone-500"
-          }`}
+              ? "demon-button-primary"
+              : "pointer-events-none inline-flex min-h-10 items-center gap-2 border border-white/10 px-3 text-sm font-bold text-stone-500"
+          }
           href={`/books/${book.id}/player`}
         >
-          <Headphones className="h-4 w-4" aria-hidden="true" />
+          <Headphones className="size-4" aria-hidden="true" />
           Play
         </Link>
         {latestJob ? (
           <Link
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-medium text-stone-100 transition hover:bg-white/[0.08]"
+            className="demon-button-secondary"
             href={`/jobs/${latestJob.id}`}
           >
-            <ListMusic className="h-4 w-4" aria-hidden="true" />
+            <ListMusic className="size-4" aria-hidden="true" />
             Task
           </Link>
         ) : null}
@@ -205,15 +217,15 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
               ? `Confirm deletion of ${book.title}`
               : `Delete ${book.title}`
           }
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+          className={
             isConfirmingDelete
-              ? "border-red-400/40 bg-red-500 text-white"
-              : "border-white/10 bg-white/[0.04] text-stone-200 hover:bg-white/[0.08]"
-          } disabled:cursor-not-allowed disabled:border-white/10 disabled:text-stone-500`}
+              ? "demon-button-danger"
+              : "demon-button-secondary"
+          }
           disabled={isDeleting}
           onClick={() => void handleDelete()}
         >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          <Trash2 className="size-4" aria-hidden="true" />
           {isDeleting
             ? "Deleting..."
             : isConfirmingDelete
@@ -224,14 +236,14 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
           <button
             type="button"
             aria-label={`Cancel deletion of ${book.title}`}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-medium text-stone-200 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:text-stone-500"
+            className="demon-button-secondary"
             disabled={isDeleting}
             onClick={() => {
               setIsConfirmingDelete(false);
               deleteBook.reset();
             }}
           >
-            <X className="h-4 w-4" aria-hidden="true" />
+            <X className="size-4" aria-hidden="true" />
             Cancel
           </button>
         ) : null}
@@ -242,9 +254,9 @@ function LibraryBookCard({ book }: { book: LibraryBookDto }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <span className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-      <span className="block text-xs text-stone-500">{label}</span>
-      <span className="mt-1 block truncate font-medium text-stone-100">
+    <span className="border border-fuchsia-200/10 bg-black/25 px-3 py-2">
+      <span className="block text-xs text-fuchsia-100/35">{label}</span>
+      <span className="mt-1 block truncate font-bold text-fuchsia-50">
         {value}
       </span>
     </span>
@@ -256,11 +268,11 @@ function StatusPill({ status }: { status: LibraryBookDto["status"] }) {
     completed: "border-emerald-300/30 bg-emerald-400/10 text-emerald-100",
     failed: "border-red-300/30 bg-red-400/10 text-red-100",
     processing: "border-amber-300/30 bg-amber-400/10 text-amber-100",
-    pending: "border-stone-300/20 bg-white/10 text-stone-200",
+    pending: "border-fuchsia-300/20 bg-white/10 text-fuchsia-100",
   }[status];
 
   return (
-    <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${tone}`}>
+    <span className={`border px-2.5 py-1 text-xs font-bold ${tone}`}>
       {status}
     </span>
   );
@@ -273,17 +285,17 @@ function JobPill({
 }) {
   const icon =
     status === "paused" ? (
-      <PauseCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      <PauseCircle className="size-3.5" aria-hidden="true" />
     ) : status === "processing" || status === "queued" ? (
-      <LoaderCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      <LoaderCircle className="size-3.5" aria-hidden="true" />
     ) : status === "failed" ? (
-      <CircleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+      <CircleAlert className="size-3.5" aria-hidden="true" />
     ) : (
-      <PlayCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      <PlayCircle className="size-3.5" aria-hidden="true" />
     );
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-stone-200">
+    <span className="inline-flex items-center gap-1.5 border border-fuchsia-200/15 bg-white/[0.06] px-2.5 py-1 text-xs font-bold text-fuchsia-100">
       {icon}
       {status}
     </span>
@@ -305,11 +317,7 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
 
-  if (minutes === 0) {
-    return `${remainingSeconds}s`;
-  }
-
-  return `${minutes}m ${remainingSeconds}s`;
+  return minutes === 0 ? `${remainingSeconds}s` : `${minutes}m ${remainingSeconds}s`;
 }
 
 export function LibraryPage() {
@@ -317,29 +325,19 @@ export function LibraryPage() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <main className="min-h-screen bg-[#151312] px-4 py-8 text-stone-100 sm:px-6 sm:py-12">
-        <section className="mx-auto grid w-full max-w-6xl gap-8 pb-24 sm:pb-0">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold tracking-[0.18em] text-red-300 uppercase">
-                Library
-              </p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-50">
-                Books
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-400">
-                Your local audiobook shelf, ready for generated chapters and
-                late-night listening.
-              </p>
-            </div>
-            <Link
-              className="rounded-lg border border-red-300/30 bg-red-500 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-red-950/30 transition hover:bg-red-400"
-              href="/upload"
-            >
-              Upload text
-            </Link>
-          </div>
-
+      <main className="demon-page">
+        <section className="demon-page-inner grid gap-5 pb-24 sm:pb-0">
+          <DemonPageHeader
+            eyebrow="Audio Grimoire"
+            title="Books"
+            description="管理本地有声书、查看生成进度，并从任何已完成章节继续听。"
+            icon={Headphones}
+            actions={
+              <Link className="demon-button-primary" href="/upload">
+                Upload text
+              </Link>
+            }
+          />
           <LibraryPageContent />
         </section>
       </main>

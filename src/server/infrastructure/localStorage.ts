@@ -46,6 +46,14 @@ export class LocalStorage implements FileStorage {
     return readFile(sourcePath);
   }
 
+  async readBinaryFile(filePath: string): Promise<Uint8Array | null> {
+    if (!(await this.exists(filePath))) {
+      return null;
+    }
+
+    return readFile(filePath);
+  }
+
   async saveChunkAudio(input: StoreBinaryInput): Promise<string> {
     const targetDir = path.join(this.rootDir, input.subdirectory ?? "chunks");
     await mkdir(targetDir, { recursive: true });
