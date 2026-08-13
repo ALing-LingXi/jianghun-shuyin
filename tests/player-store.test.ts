@@ -120,4 +120,79 @@ describe("player store", () => {
       partId: "22222222-2222-4222-8222-222222222222",
     });
   });
+
+  it("continues only to the immediate next generated part", () => {
+    usePlayerStore.getState().setParts([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        index: 0,
+        title: "Chapter 1",
+        status: "completed",
+        audioUrl: "/audio/1.mp3",
+        durationSeconds: 120,
+        errorMessage: null,
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        index: 1,
+        title: "Chapter 2",
+        status: "pending",
+        audioUrl: null,
+        durationSeconds: 0,
+        errorMessage: null,
+      },
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        index: 2,
+        title: "Chapter 3",
+        status: "completed",
+        audioUrl: "/audio/3.mp3",
+        durationSeconds: 180,
+        errorMessage: null,
+      },
+    ]);
+    usePlayerStore.getState().setPlaying(true);
+
+    usePlayerStore.getState().handlePartEnded();
+
+    expect(usePlayerStore.getState()).toMatchObject({
+      partId: "11111111-1111-4111-8111-111111111111",
+      isPlaying: false,
+    });
+  });
+
+  it("stops when the sleep timer has expired", () => {
+    usePlayerStore.getState().setParts([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        index: 0,
+        title: "Chapter 1",
+        status: "completed",
+        audioUrl: "/audio/1.mp3",
+        durationSeconds: 120,
+        errorMessage: null,
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        index: 1,
+        title: "Chapter 2",
+        status: "completed",
+        audioUrl: "/audio/2.mp3",
+        durationSeconds: 180,
+        errorMessage: null,
+      },
+    ]);
+    usePlayerStore.setState({
+      isPlaying: true,
+      sleepTimerEndsAt: Date.now() - 1,
+    });
+
+    usePlayerStore.getState().handlePartEnded();
+
+    expect(usePlayerStore.getState()).toMatchObject({
+      partId: "11111111-1111-4111-8111-111111111111",
+      isPlaying: false,
+      sleepTimerEndsAt: null,
+    });
+  });
 });

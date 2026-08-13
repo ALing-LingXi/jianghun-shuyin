@@ -1,7 +1,6 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   Headphones,
@@ -25,7 +24,7 @@ export default function HomePage() {
           <h1 className="demon-home-title">匠魂书音</h1>
 
           <p className="demon-home-lead">
-            把小说收进本地魔殿。阅读书架保存文字与封面，听书书架生成章节音频，
+            把小说收进本地魂殿。阅读书架保存文字与封面，听书书架生成章节音频，
             两套数据独立维护。
           </p>
 
@@ -35,14 +34,14 @@ export default function HomePage() {
               label="听书书架"
               description="管理有声书任务、章节音频和播放队列。"
               icon={Headphones}
-              image="/assets/images/恶魔勇士/tMPQqN.gif"
+              image="/assets/images/%E6%81%B6%E9%AD%94%E5%8B%87%E5%A3%AB/tMPQqN.gif"
             />
             <HomeGate
               href="/reading"
               label="阅读书架"
               description="上传 TXT 与封面，按章节滚动阅读。"
               icon={BookOpen}
-              image="/assets/images/恶魔女王/1P7MSU.gif"
+              image="/assets/images/%E6%81%B6%E9%AD%94%E5%A5%B3%E7%8E%8B/1P7MSU.gif"
             />
           </div>
 
@@ -50,7 +49,7 @@ export default function HomePage() {
             <StarBorder
               as="div"
               color="#ff79ca"
-              speed="4s"
+              speed="5s"
               thickness={2}
               className="demon-star-cta"
             >
@@ -73,12 +72,12 @@ export default function HomePage() {
           </div>
           <Image
             className="demon-home-character"
-            src="/assets/images/恶魔女王/zs5jpu.gif"
+            src="/assets/images/%E6%81%B6%E9%AD%94%E5%A5%B3%E7%8E%8B/zs5jpu.gif"
             alt=""
             width={416}
             height={416}
             unoptimized
-            loading="eager"
+            priority
           />
           <StatusDock />
         </aside>
@@ -108,7 +107,7 @@ function HomeGate({
   href: string;
   label: string;
   description: string;
-  icon: typeof Headphones;
+  icon: LucideIcon;
   image: string;
 }) {
   return (
@@ -140,7 +139,7 @@ function StatusDock() {
     <div className="demon-home-status-dock">
       <Image
         className="demon-home-status-mascot"
-        src="/assets/images/小恶魔/status.gif"
+        src="/assets/images/%E5%B0%8F%E6%81%B6%E9%AD%94/status.gif"
         alt=""
         width={228}
         height={130}
@@ -151,7 +150,7 @@ function StatusDock() {
         <div className="demon-home-health-heading">
           <span>本地服务</span>
           <Image
-            src="/assets/images/小恶魔/hi.gif"
+            src="/assets/images/%E5%B0%8F%E6%81%B6%E9%AD%94/hi.gif"
             alt=""
             width={44}
             height={44}

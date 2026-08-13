@@ -655,6 +655,7 @@ input[type="range"]::-moz-range-thumb {
   position: relative;
   z-index: 3;
   max-width: 50rem;
+  overflow: hidden;
   padding: 1.25rem;
   border: 2px solid rgba(255, 103, 194, 0.48);
   background:
@@ -670,6 +671,27 @@ input[type="range"]::-moz-range-thumb {
     8px 8px 0 rgba(64, 0, 43, 0.86),
     inset 0 0 42px rgba(255, 35, 158, 0.1);
   backdrop-filter: blur(10px);
+}
+
+.demon-home-copy::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0 42%,
+    rgba(255, 240, 166, 0.14) 48%,
+    transparent 56% 100%
+  );
+  content: "";
+  opacity: 0.58;
+  transform: translateX(-120%);
+  animation: demon-panel-sheen 8s ease-in-out infinite;
+}
+
+.demon-home-copy > * {
+  position: relative;
+  z-index: 1;
 }
 
 .demon-home-kicker {
@@ -690,13 +712,15 @@ input[type="range"]::-moz-range-thumb {
 
 .demon-home-title {
   margin: 0.55rem 0 0;
-  color: white;
+  background: linear-gradient(180deg, #fff 0%, #ffd5ef 46%, #ff69c1 100%);
+  background-clip: text;
+  color: transparent;
   font-family: var(--font-display);
   font-size: clamp(3.5rem, 11vw, 7.5rem);
   font-weight: 900;
   line-height: 0.98;
+  filter: drop-shadow(5px 5px 0 #821058);
   text-shadow:
-    5px 5px 0 #821058,
     -2px -2px 0 #ff91d8;
 }
 
@@ -874,6 +898,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow:
     0 0 60px rgba(255, 149, 215, 0.48),
     inset 0 0 36px rgba(255, 64, 175, 0.32);
+  animation: demon-seal-breathe 5.5s ease-in-out infinite;
 }
 
 .demon-moon-seal span {
@@ -1054,6 +1079,33 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+@keyframes demon-panel-sheen {
+  0%,
+  64% {
+    transform: translateX(-120%);
+  }
+  82%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes demon-seal-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 48px rgba(255, 149, 215, 0.42),
+      inset 0 0 30px rgba(255, 64, 175, 0.26);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 72px rgba(255, 149, 215, 0.58),
+      inset 0 0 44px rgba(255, 64, 175, 0.36);
+    transform: scale(1.018);
+  }
+}
+
 .animate-star-movement-bottom {
   animation: star-movement-bottom linear infinite alternate;
 }
@@ -1192,5 +1244,10 @@ input[type="range"]::-moz-range-thumb {
 
   .demon-aurora {
     display: none;
+  }
+
+  .demon-home-copy::after,
+  .demon-moon-seal {
+    animation: none;
   }
 }

@@ -132,19 +132,30 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     }),
   handlePartEnded: () =>
     set((state) => {
-      if (state.stopAfterCurrent || !state.continuousPlayback) {
-        return { isPlaying: false, stopAfterCurrent: false };
+      if (
+        state.stopAfterCurrent ||
+        !state.continuousPlayback ||
+        (state.sleepTimerEndsAt !== null && state.sleepTimerEndsAt <= Date.now())
+      ) {
+        return {
+          isPlaying: false,
+          stopAfterCurrent: false,
+          sleepTimerEndsAt:
+            state.sleepTimerEndsAt !== null && state.sleepTimerEndsAt <= Date.now()
+              ? null
+              : state.sleepTimerEndsAt,
+        };
       }
 
-      const playableParts = state.parts.filter(isPlayablePart);
-      const currentIndex = playableParts.findIndex(
+      const currentIndex = state.parts.findIndex(
         (part) => part.id === state.partId,
       );
-      const nextPart = playableParts[currentIndex + 1];
+      const nextPart = state.parts[currentIndex + 1];
 
-      return nextPart
+      return nextPart && isPlayablePart(nextPart)
         ? {
             partId: nextPart.id,
+            isPlaying: true,
             currentTimeSeconds: 0,
             durationSeconds: null,
             seekTargetSeconds: null,

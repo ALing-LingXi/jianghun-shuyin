@@ -14,6 +14,7 @@ function isPlayablePart(part: PlayerPartDto | null): part is PlayablePart {
 
 export function PlayerAudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ignoreNextPauseRef = useRef(false);
   const lastPlaybackUpdateRef = useRef<{
     timestamp: number;
     currentTimeSeconds: number;
@@ -27,6 +28,11 @@ export function PlayerAudioEngine() {
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const seekTargetSeconds = usePlayerStore((state) => state.seekTargetSeconds);
+  const continuousPlayback = usePlayerStore(
+    (state) => state.continuousPlayback,
+  );
+  const stopAfterCurrent = usePlayerStore((state) => state.stopAfterCurrent);
+  const sleepTimerEndsAt = usePlayerStore((state) => state.sleepTimerEndsAt);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
   const setPlaybackTime = usePlayerStore((state) => state.setPlaybackTime);
   const clearSeekTarget = usePlayerStore((state) => state.clearSeekTarget);
@@ -116,6 +122,31 @@ export function PlayerAudioEngine() {
     setPlaybackTime({ currentTimeSeconds, durationSeconds });
   }
 
+  function hasPlayableImmediateNextPart() {
+    const currentIndex = parts.findIndex((part) => part.id === partId);
+    const nextPart = parts[currentIndex + 1] ?? null;
+
+    return isPlayablePart(nextPart);
+  }
+
+  function shouldContinueAfterEnded() {
+    return (
+      continuousPlayback &&
+      !stopAfterCurrent &&
+      (sleepTimerEndsAt === null || sleepTimerEndsAt > Date.now()) &&
+      hasPlayableImmediateNextPart()
+    );
+  }
+
+  function handleEnded() {
+    const shouldIgnorePause = shouldContinueAfterEnded();
+    if (shouldIgnorePause) {
+      ignoreNextPauseRef.current = true;
+    }
+
+    handlePartEnded();
+  }
+
   return (
     <audio
       ref={audioRef}
@@ -124,11 +155,18 @@ export function PlayerAudioEngine() {
       data-testid="player-audio-engine"
       preload="metadata"
       onPlay={() => setPlaying(true)}
-      onPause={() => setPlaying(false)}
+      onPause={() => {
+        if (ignoreNextPauseRef.current) {
+          ignoreNextPauseRef.current = false;
+          return;
+        }
+
+        setPlaying(false);
+      }}
       onLoadedMetadata={(event) => syncPlaybackTime(event.currentTarget, true)}
       onDurationChange={(event) => syncPlaybackTime(event.currentTarget, true)}
       onTimeUpdate={(event) => syncPlaybackTime(event.currentTarget)}
-      onEnded={handlePartEnded}
+      onEnded={handleEnded}
     />
   );
 }
