@@ -140,7 +140,7 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
             <div className="relative mx-auto aspect-[4/5] w-full max-w-48 overflow-hidden border-2 border-fuchsia-200/30 bg-[#240018] shadow-[8px_8px_0_#59043b] md:mx-0">
               <Image
                 className="object-cover opacity-80 mix-blend-screen"
-                src="/assets/images/恶魔勇士/GwGFIM.gif"
+                src="/assets/images/小恶魔/changelog.png"
                 alt=""
                 fill
                 sizes="192px"

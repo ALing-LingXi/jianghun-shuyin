@@ -44,10 +44,10 @@ export default function UploadPage() {
             <div className="relative min-h-48 overflow-hidden border border-fuchsia-200/10 bg-black/25">
               <Image
                 className="absolute inset-x-0 bottom-0 mx-auto h-auto w-56 max-w-[80%] object-contain"
-                src="/assets/images/小恶魔/status.gif"
+                src="/assets/images/小恶魔/changelog.png"
                 alt=""
-                width={228}
-                height={130}
+                width={185}
+                height={156}
                 unoptimized
                 loading="lazy"
               />

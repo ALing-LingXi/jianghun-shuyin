@@ -175,6 +175,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .demon-aurora {
+  display: none;
   position: absolute;
   inset: -16% -8% auto;
   height: 62vh;
@@ -1095,6 +1096,17 @@ input[type="range"]::-moz-range-thumb {
 
   .demon-page-actions > * {
     flex: 1;
+  }
+
+  .demon-mobile-nav {
+    backdrop-filter: none;
+  }
+
+  .demon-home-copy,
+  .demon-home-character,
+  .demon-home-status-mascot,
+  .demon-home-gate > img {
+    filter: none;
   }
 
   .demon-home {

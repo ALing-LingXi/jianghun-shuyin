@@ -11,7 +11,6 @@ import {
   ScrollText,
   Upload,
 } from "lucide-react";
-import Aurora from "@/components/Aurora";
 
 const navigation = [
   { href: "/", label: "魂殿", icon: Home },
@@ -27,14 +26,6 @@ export function DemonAppFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="demon-app-frame">
       <div className="demon-backdrop" aria-hidden="true">
-        <div className="demon-aurora">
-          <Aurora
-            colorStops={["#ff2aa3", "#6f1cd8", "#ff7867"]}
-            amplitude={0.75}
-            blend={0.72}
-            speed={0.45}
-          />
-        </div>
         <Image
           className="demon-sky-image"
           src="/assets/backgrounds/bg_top.png"

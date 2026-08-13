@@ -14,6 +14,15 @@ function isPlayablePart(part: PlayerPartDto | null): part is PlayablePart {
 
 export function PlayerAudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastPlaybackUpdateRef = useRef<{
+    timestamp: number;
+    currentTimeSeconds: number;
+    durationSeconds: number | null;
+  }>({
+    timestamp: 0,
+    currentTimeSeconds: 0,
+    durationSeconds: null,
+  });
   const parts = usePlayerStore((state) => state.parts);
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
@@ -82,6 +91,31 @@ export function PlayerAudioEngine() {
     audio.pause();
   }, [currentPart, isPlaying, setPlaying]);
 
+  function syncPlaybackTime(audio: HTMLAudioElement, force = false) {
+    const durationSeconds = Number.isFinite(audio.duration)
+      ? audio.duration
+      : null;
+    const currentTimeSeconds = audio.currentTime;
+    const previous = lastPlaybackUpdateRef.current;
+    const now = performance.now();
+
+    if (
+      !force &&
+      now - previous.timestamp < 250 &&
+      Math.abs(currentTimeSeconds - previous.currentTimeSeconds) < 0.25 &&
+      durationSeconds === previous.durationSeconds
+    ) {
+      return;
+    }
+
+    lastPlaybackUpdateRef.current = {
+      timestamp: now,
+      currentTimeSeconds,
+      durationSeconds,
+    };
+    setPlaybackTime({ currentTimeSeconds, durationSeconds });
+  }
+
   return (
     <audio
       ref={audioRef}
@@ -91,30 +125,9 @@ export function PlayerAudioEngine() {
       preload="metadata"
       onPlay={() => setPlaying(true)}
       onPause={() => setPlaying(false)}
-      onLoadedMetadata={(event) =>
-        setPlaybackTime({
-          currentTimeSeconds: event.currentTarget.currentTime,
-          durationSeconds: Number.isFinite(event.currentTarget.duration)
-            ? event.currentTarget.duration
-            : null,
-        })
-      }
-      onDurationChange={(event) =>
-        setPlaybackTime({
-          currentTimeSeconds: event.currentTarget.currentTime,
-          durationSeconds: Number.isFinite(event.currentTarget.duration)
-            ? event.currentTarget.duration
-            : null,
-        })
-      }
-      onTimeUpdate={(event) =>
-        setPlaybackTime({
-          currentTimeSeconds: event.currentTarget.currentTime,
-          durationSeconds: Number.isFinite(event.currentTarget.duration)
-            ? event.currentTarget.duration
-            : null,
-        })
-      }
+      onLoadedMetadata={(event) => syncPlaybackTime(event.currentTarget, true)}
+      onDurationChange={(event) => syncPlaybackTime(event.currentTarget, true)}
+      onTimeUpdate={(event) => syncPlaybackTime(event.currentTarget)}
       onEnded={handlePartEnded}
     />
   );

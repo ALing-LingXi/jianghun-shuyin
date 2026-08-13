@@ -2,8 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 import {
   BookOpen,
   Headphones,
@@ -11,64 +9,20 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-import BlurText from "@/components/BlurText";
-import ShinyText from "@/components/ShinyText";
 import StarBorder from "@/components/StarBorder";
 import { HealthStatus } from "@/features/health/health-status";
 
-const DesktopSplashCursor = dynamic(() => import("@/components/SplashCursor"), {
-  ssr: false,
-});
-
 export default function HomePage() {
-  const [showDesktopCursor, setShowDesktopCursor] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia(
-      "(min-width: 1024px) and (prefers-reduced-motion: no-preference)",
-    );
-    const update = () => setShowDesktopCursor(media.matches);
-
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-
   return (
     <main className="demon-home">
-      {showDesktopCursor && (
-        <DesktopSplashCursor
-          DYE_RESOLUTION={384}
-          SIM_RESOLUTION={48}
-          DENSITY_DISSIPATION={4}
-          VELOCITY_DISSIPATION={2.4}
-          SPLAT_RADIUS={0.1}
-          SPLAT_FORCE={2200}
-          CURL={2}
-          RAINBOW_MODE={false}
-          COLOR="#ff2aa3"
-        />
-      )}
-
       <section className="demon-home-hero">
         <div className="demon-home-copy">
           <p className="demon-home-kicker">
             <Sparkles aria-hidden="true" />
-            <ShinyText
-              text="LOCAL NOVEL SHRINE"
-              color="#f8acd9"
-              shineColor="#fff3a4"
-              speed={3}
-            />
+            <span>LOCAL NOVEL SHRINE</span>
           </p>
 
-          <BlurText
-            text="匠魂书音"
-            animateBy="letters"
-            delay={90}
-            direction="bottom"
-            className="demon-home-title"
-          />
+          <h1 className="demon-home-title">匠魂书音</h1>
 
           <p className="demon-home-lead">
             把小说收进本地魔殿。阅读书架保存文字与封面，听书书架生成章节音频，

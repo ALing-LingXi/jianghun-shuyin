@@ -74,9 +74,20 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     }),
   setPlaying: (isPlaying) => set({ isPlaying }),
   setPlaybackTime: ({ currentTimeSeconds, durationSeconds }) =>
-    set({
-      currentTimeSeconds,
-      durationSeconds,
+    set((state) => {
+      const normalizedTime = Math.max(0, currentTimeSeconds);
+      const sameDuration = state.durationSeconds === durationSeconds;
+      const sameTime =
+        Math.abs(state.currentTimeSeconds - normalizedTime) < 0.2;
+
+      if (sameDuration && sameTime) {
+        return {};
+      }
+
+      return {
+        currentTimeSeconds: normalizedTime,
+        durationSeconds,
+      };
     }),
   requestSeek: (seconds) => set({ seekTargetSeconds: Math.max(0, seconds) }),
   clearSeekTarget: () => set({ seekTargetSeconds: null }),
