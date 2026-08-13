@@ -25,6 +25,9 @@ export type SynthesizePartChunksInput = {
   ttsLimiter?: Limiter;
   maxAttempts?: number;
   retryDelaysMs?: readonly number[];
+  shouldContinue?: () => Promise<boolean> | boolean;
+  discardAudio?: (audioPath: string) => Promise<void> | void;
+  stopOnFailure?: boolean;
 };
 
 export type SynthesizePartChunksResult = {
@@ -49,12 +52,24 @@ export async function synthesizePartChunks(
   const createdChunks: Chunk[] = new Array(plannedChunks.length);
   const limitTts =
     input.ttsLimiter ?? createLimiter(DEFAULT_GLOBAL_TTS_CONCURRENCY);
+  const effectiveConcurrency = input.stopOnFailure
+    ? 1
+    : input.concurrency ?? DEFAULT_TTS_CHUNK_CONCURRENCY;
+  let stoppedByFailure = false;
   let failedCount = 0;
 
   await runWithConcurrency(
     plannedChunks,
-    input.concurrency ?? DEFAULT_TTS_CHUNK_CONCURRENCY,
+    effectiveConcurrency,
     async (plannedChunk, resultIndex) => {
+      if (stoppedByFailure) {
+        return;
+      }
+
+      if (input.shouldContinue && !(await input.shouldContinue())) {
+        return;
+      }
+
       const { cacheKey } = createChunkCacheKey({
         text: plannedChunk.text,
         voice: input.voice,
@@ -70,6 +85,11 @@ export async function synthesizePartChunks(
       });
 
       try {
+        if (input.shouldContinue && !(await input.shouldContinue())) {
+          await deps.chunks.deleteById(chunk.id);
+          return;
+        }
+
         const synthesis = await synthesizeWithRetry(
           deps.tts,
           {
@@ -86,8 +106,16 @@ export async function synthesizePartChunks(
             maxAttempts: input.maxAttempts ?? DEFAULT_MAX_TTS_ATTEMPTS,
             retryDelaysMs: input.retryDelaysMs ?? RETRY_DELAYS_MS,
             ttsLimiter: limitTts,
+            shouldContinue: input.shouldContinue,
           },
         );
+
+        if (input.shouldContinue && !(await input.shouldContinue())) {
+          await input.discardAudio?.(synthesis.audio.audioPath);
+          await deps.chunks.deleteById(chunk.id);
+          return;
+        }
+
         const completed = await deps.chunks.updateById(chunk.id, {
           audioPath: synthesis.audio.audioPath,
           status: "completed",
@@ -96,7 +124,13 @@ export async function synthesizePartChunks(
         });
         createdChunks[resultIndex] = completed ?? chunk;
       } catch (error) {
+        if (input.shouldContinue && !(await input.shouldContinue())) {
+          await deps.chunks.deleteById(chunk.id);
+          return;
+        }
+
         failedCount += 1;
+        stoppedByFailure = input.stopOnFailure ?? false;
         const retryCount = retryCountFromError(error);
         const errorMessage = toErrorMessage(error);
         const failed = await deps.chunks.updateById(chunk.id, {
@@ -116,7 +150,7 @@ export async function synthesizePartChunks(
   );
 
   return {
-    chunks: createdChunks,
+    chunks: createdChunks.filter((chunk): chunk is Chunk => Boolean(chunk)),
     cacheHits: 0,
     failedCount,
   };
@@ -132,6 +166,7 @@ async function synthesizeWithRetry(
     maxAttempts: number;
     retryDelaysMs: readonly number[];
     ttsLimiter: Limiter;
+    shouldContinue?: () => Promise<boolean> | boolean;
   },
 ): Promise<{
   audio: Awaited<ReturnType<TTSProvider["synthesize"]>>;
@@ -140,6 +175,10 @@ async function synthesizeWithRetry(
   let lastError: unknown;
 
   for (let attempt = 0; attempt < context.maxAttempts; attempt += 1) {
+    if (context.shouldContinue && !(await context.shouldContinue())) {
+      throw new Error("TTS synthesis stopped");
+    }
+
     try {
       return {
         audio: await context.ttsLimiter(() => tts.synthesize(input)),
@@ -169,6 +208,10 @@ async function synthesizeWithRetry(
       }
 
       if (attempt < context.maxAttempts - 1) {
+        if (context.shouldContinue && !(await context.shouldContinue())) {
+          throw new Error("TTS synthesis stopped");
+        }
+
         await waitForRetry(attempt, context.retryDelaysMs);
       }
     }

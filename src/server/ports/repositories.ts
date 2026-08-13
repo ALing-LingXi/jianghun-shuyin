@@ -43,6 +43,7 @@ export interface JobRepository {
   create(input: CreateJobInput): Promise<Job>;
   findById(id: string): Promise<Job | null>;
   findLatestByBookId(bookId: string): Promise<Job | null>;
+  listByBookId(bookId: string): Promise<Job[]>;
   updateById(id: string, input: UpdateJobInput): Promise<Job | null>;
   deleteByBookId(bookId: string): Promise<void>;
 }
@@ -93,6 +94,7 @@ export interface ChunkRepository {
   listByPartId(partId: string): Promise<Chunk[]>;
   findCompletedByTextHash(textHash: string): Promise<Chunk | null>;
   updateById(id: string, input: UpdateChunkInput): Promise<Chunk | null>;
+  deleteById(id: string): Promise<void>;
   deleteByPartId(partId: string): Promise<void>;
   deleteByPartIds(partIds: string[]): Promise<void>;
 }

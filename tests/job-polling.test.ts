@@ -23,6 +23,7 @@ describe("job polling", () => {
   it("stops polling terminal jobs", () => {
     expect(getJobPollingInterval("completed")).toBe(false);
     expect(getJobPollingInterval("completed_with_errors")).toBe(false);
+    expect(getJobPollingInterval("paused")).toBe(false);
     expect(getJobPollingInterval("failed")).toBe(false);
     expect(getJobPollingInterval("cancelled")).toBe(false);
   });

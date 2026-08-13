@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FileStorage } from "../../src/server/ports/storage";
 import type { TTSProvider } from "../../src/server/ports/tts";
 import {
   RetryChunkError,
@@ -68,7 +67,6 @@ function createFakeTts(
 describe("retryChunk", () => {
   it("retries only the failed chunk and marks it completed", async () => {
     const context = await createFailedChunk();
-    const storage = createFakeStorage();
     const tts = createFakeTts(async (input) => ({
       audioPath: `storage/chunks/${input.fileName}`,
       byteLength: 4,
@@ -78,7 +76,7 @@ describe("retryChunk", () => {
     }));
 
     const result = await retryChunk(
-      { chunks: context.chunks, storage, tts },
+      { chunks: context.chunks, tts },
       {
         chunkId: context.chunk.id,
         ...context.synthesisInput,
@@ -97,14 +95,13 @@ describe("retryChunk", () => {
 
   it("records another failure and increments retryCount", async () => {
     const context = await createFailedChunk();
-    const storage = createFakeStorage();
     const tts = createFakeTts(async () => {
       throw new Error("retry network error");
     });
 
     await expect(
       retryChunk(
-        { chunks: context.chunks, storage, tts },
+        { chunks: context.chunks, tts },
         {
           chunkId: context.chunk.id,
           ...context.synthesisInput,
@@ -123,14 +120,13 @@ describe("retryChunk", () => {
 
   it("rejects retry parameters that do not match the chunk cache key", async () => {
     const context = await createFailedChunk();
-    const storage = createFakeStorage();
     const tts = createFakeTts(async () => {
       throw new Error("should not run");
     });
 
     await expect(
       retryChunk(
-        { chunks: context.chunks, storage, tts },
+        { chunks: context.chunks, tts },
         {
           chunkId: context.chunk.id,
           ...context.synthesisInput,
@@ -144,14 +140,13 @@ describe("retryChunk", () => {
     expect(tts.synthesize).not.toHaveBeenCalled();
   });
 
-  it("does not use a completed chunk cache entry when its audio file is missing", async () => {
+  it("does not reuse a completed chunk cache entry", async () => {
     const context = await createFailedChunk();
-    const storage = createFakeStorage({ exists: vi.fn(async () => false) });
     const cached = await context.chunks.create({
       partId: context.chunk.partId,
       index: 1,
       textHash: context.chunk.textHash,
-      audioPath: "storage/chunks/missing-cache.mp3",
+      audioPath: "storage/chunks/existing-cache.mp3",
       status: "completed",
     });
     const tts = createFakeTts(async (input) => ({
@@ -163,14 +158,13 @@ describe("retryChunk", () => {
     }));
 
     const result = await retryChunk(
-      { chunks: context.chunks, storage, tts },
+      { chunks: context.chunks, tts },
       {
         chunkId: context.chunk.id,
         ...context.synthesisInput,
       },
     );
 
-    expect(storage.exists).toHaveBeenCalledWith(cached.audioPath);
     expect(tts.synthesize).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       id: context.chunk.id,
@@ -179,23 +173,7 @@ describe("retryChunk", () => {
     });
     expect(result.audioPath).toContain("retry-1.mp3");
     await expect(context.chunks.findById(cached.id)).resolves.toMatchObject({
-      audioPath: null,
+      audioPath: "storage/chunks/existing-cache.mp3",
     });
   });
 });
-
-function createFakeStorage(
-  overrides: Partial<Omit<FileStorage, "exists">> & {
-    exists?: ReturnType<typeof vi.fn>;
-  } = {},
-): FileStorage & { exists: ReturnType<typeof vi.fn> } {
-  return {
-    saveTextSource: vi.fn(async () => "storage/sources/source.txt"),
-    saveBinarySource: vi.fn(async () => "storage/sources/source.bin"),
-    readTextSource: vi.fn(async () => new Uint8Array()),
-    saveChunkAudio: vi.fn(async () => "storage/chunks/chunk.mp3"),
-    deleteFile: vi.fn(async () => undefined),
-    exists: vi.fn(async () => true),
-    ...overrides,
-  };
-}

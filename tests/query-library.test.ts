@@ -148,4 +148,38 @@ describe("queryLibrary", () => {
       playablePartCount: 1,
     });
   });
+
+  it("treats paused jobs as in-progress library items", async () => {
+    const client = createDatabaseClient(":memory:");
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const parts = new DrizzlePartRepository(client.db);
+    const book = await books.create({
+      title: "Paused Book",
+      sourcePath: "storage/sources/paused-book.txt",
+      status: "pending",
+    });
+    await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+      status: "paused",
+      stage: "tts",
+      progress: 85,
+    });
+
+    const result = await queryLibrary({ books, jobs, parts });
+
+    expect(result.books[0]).toMatchObject({
+      id: book.id,
+      status: "processing",
+      latestJob: {
+        status: "paused",
+      },
+    });
+  });
 });

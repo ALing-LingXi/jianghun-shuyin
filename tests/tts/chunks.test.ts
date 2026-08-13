@@ -441,6 +441,47 @@ describe("synthesizePartChunks", () => {
       errorMessage: "No audio was received. (after 5 TTS attempts)",
     });
   });
+
+  it("discards returned audio when synthesis is stopped before writing completion", async () => {
+    const context = await createTestContext();
+    const tts = createFakeTts(async (input) => ({
+      audioPath: `storage/chunks/${input.fileName}`,
+      byteLength: 4,
+      voice: input.voice,
+      rate: input.rate,
+      pitch: input.pitch,
+    }));
+    const discardAudio = vi.fn();
+    let checks = 0;
+
+    const result = await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "stop after synthesis.",
+        voice: "voice-a",
+        rate: "+0%",
+        pitch: "+0Hz",
+        shouldContinue: () => {
+          checks += 1;
+          return checks < 4;
+        },
+        discardAudio,
+      },
+    );
+
+    expect(tts.synthesize).toHaveBeenCalledTimes(1);
+    expect(discardAudio).toHaveBeenCalledWith(
+      `storage/chunks/${context.part.id}-0.mp3`,
+    );
+    expect(result).toMatchObject({
+      failedCount: 0,
+      chunks: [],
+    });
+    await expect(context.chunks.listByPartId(context.part.id)).resolves.toEqual(
+      [],
+    );
+  });
 });
 
 async function wait(delayMs: number): Promise<void> {

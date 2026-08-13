@@ -61,10 +61,13 @@ export function cleanText(text: string): CleanTextResult {
   const normalized = text
     .replace(/^\uFEFF/, "")
     .replace(/\r\n|\r/g, "\n")
-    .replace(/\u00a0/g, " ");
+    .replace(/\u00a0/g, " ")
+    .replace(/(?:\\t|\/t){2,}/gi, " ")
+    .replace(/\t{2,}/g, " ");
   const lines = normalized
     .split("\n")
-    .map((line) => line.replace(/[ \t\u3000]+$/g, ""));
+    .map((line) => normalizeLineWhitespace(line))
+    .filter((line) => !isDecorativeLine(line));
   const beforeTrimLength = lines.length;
   const trimmedLines = trimOuterBlankLines(lines);
   const trimmedBlankLineCount = beforeTrimLength - trimmedLines.length;
@@ -81,6 +84,24 @@ export function cleanText(text: string): CleanTextResult {
     collapsedBlankLineCount,
     trimmedBlankLineCount,
   };
+}
+
+function normalizeLineWhitespace(line: string): string {
+  return line
+    .replace(/(?:\\t|\/t)/gi, " ")
+    .replace(/\t/g, " ")
+    .replace(/[ \u3000]{3,}/g, " ")
+    .replace(/[ \u3000]+$/g, "");
+}
+
+function isDecorativeLine(line: string): boolean {
+  const compact = line.replace(/[\s\u3000]/g, "");
+
+  if (compact.length < 3) {
+    return false;
+  }
+
+  return /^[*＊_\-—=＝~～·・•◆◇■□＿]+$/u.test(compact);
 }
 
 export function detectChapters(text: string): DetectChaptersResult {

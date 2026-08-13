@@ -1,6 +1,7 @@
 export const JOB_STATUSES = [
   "queued",
   "processing",
+  "paused",
   "completed",
   "completed_with_errors",
   "failed",

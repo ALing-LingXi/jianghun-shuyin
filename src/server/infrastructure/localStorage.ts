@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
@@ -54,6 +54,24 @@ export class LocalStorage implements FileStorage {
     await writeFile(filePath, input.content);
 
     return filePath;
+  }
+
+  async listFiles(subdirectory: string): Promise<string[]> {
+    const root = path.resolve(this.rootDir);
+    const targetDir = path.resolve(this.rootDir, subdirectory);
+
+    if (targetDir === root || !targetDir.startsWith(`${root}${path.sep}`)) {
+      return [];
+    }
+
+    try {
+      const entries = await readdir(targetDir, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => path.join(targetDir, entry.name));
+    } catch {
+      return [];
+    }
   }
 
   async deleteFile(filePath: string): Promise<void> {

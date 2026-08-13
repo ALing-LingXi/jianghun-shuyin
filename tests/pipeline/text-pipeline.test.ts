@@ -47,6 +47,34 @@ describe("text pipeline", () => {
     expect(result.trimmedBlankLineCount).toBe(2);
   });
 
+  it("removes decorative lines and escaped tab noise conservatively", () => {
+    const result = cleanText(
+      [
+        "第一章 风起",
+        "****",
+        "他说：密码是 ****。",
+        "A\t\t\tB",
+        "C\\t\\t\\tD",
+        "E/t/t/tF",
+        "------",
+        "======",
+        "＿＿＿＿",
+        "normal prose",
+      ].join("\n"),
+    );
+
+    expect(result.text).toBe(
+      [
+        "第一章 风起",
+        "他说：密码是 ****。",
+        "A B",
+        "C D",
+        "E F",
+        "normal prose",
+      ].join("\n"),
+    );
+  });
+
   it("detects common chapter headings", () => {
     const result = detectChapters(
       [

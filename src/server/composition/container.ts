@@ -10,9 +10,11 @@ import {
 } from "@/server/infrastructure/db";
 import { createBookJob } from "@/server/application/createBookJob";
 import { deleteBook } from "@/server/application/deleteBook";
+import { pauseJobGeneration } from "@/server/application/pauseJobGeneration";
 import { queryJob } from "@/server/application/queryJob";
 import { queryLibrary } from "@/server/application/queryLibrary";
 import { queryPlayer } from "@/server/application/queryPlayer";
+import { resumeJobGeneration } from "@/server/application/resumeJobGeneration";
 import { retryChunk } from "@/server/application/retryChunk";
 import { retryPart } from "@/server/application/retryPart";
 import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
@@ -55,10 +57,14 @@ export function createContainer() {
     queryJob: (jobId: string) => queryJob({ jobs, parts }, jobId),
     queryLibrary: () => queryLibrary({ books, jobs, parts }),
     queryPlayer: (bookId: string) =>
-      queryPlayer({ books, parts, chunks }, bookId),
+      queryPlayer({ books, jobs, parts, chunks }, bookId),
+    pauseJobGeneration: (input: Parameters<typeof pauseJobGeneration>[1]) =>
+      pauseJobGeneration({ jobs }, input),
+    resumeJobGeneration: (input: Parameters<typeof resumeJobGeneration>[1]) =>
+      resumeJobGeneration({ jobs, parts }, input),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
       retryChunk(
-        { chunks, storage, tts: ttsProvider, ttsLimiter: retryTtsLimiter },
+        { chunks, tts: ttsProvider, ttsLimiter: retryTtsLimiter },
         input,
       ),
     retryPart: (input: Parameters<typeof retryPart>[1]) =>

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,14 +54,17 @@ async function createTestContext() {
     errorMessage: "1 chapter(s) failed.",
   });
   const audioPath = path.join(storageRoot, "chunks", "failed.mp3");
+  const partAudioPath = path.join(storageRoot, "parts", "chapter.mp3");
   await mkdir(path.dirname(audioPath), { recursive: true });
+  await mkdir(path.dirname(partAudioPath), { recursive: true });
   await writeFile(audioPath, new Uint8Array([1, 2, 3]));
+  await writeFile(partAudioPath, new Uint8Array([4, 5, 6]));
   const part = await parts.create({
     bookId: book.id,
     index: 0,
     title: "Chapter 1",
     status: "failed",
-    audioPath: path.join(storageRoot, "parts", "chapter.mp3"),
+    audioPath: partAudioPath,
     durationSeconds: 12,
   });
   await chunks.create({
@@ -73,7 +76,18 @@ async function createTestContext() {
     errorMessage: "No audio was received.",
   });
 
-  return { books, jobs, parts, chunks, storage, book, job, part, audioPath };
+  return {
+    books,
+    jobs,
+    parts,
+    chunks,
+    storage,
+    book,
+    job,
+    part,
+    audioPath,
+    partAudioPath,
+  };
 }
 
 describe("retryPart", () => {
@@ -89,6 +103,8 @@ describe("retryPart", () => {
       durationSeconds: null,
     });
     await expect(context.chunks.listByPartId(context.part.id)).resolves.toEqual([]);
+    await expect(access(context.audioPath)).rejects.toThrow();
+    await expect(access(context.partAudioPath)).rejects.toThrow();
     await expect(context.jobs.findById(context.job.id)).resolves.toMatchObject({
       status: "processing",
       stage: "tts",

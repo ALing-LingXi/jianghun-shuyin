@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { JobDto } from "@/shared/schemas/job";
+import { JobGenerationControls } from "./job-generation-controls";
 
 export function JobStatusPanel({ job }: { job: JobDto }) {
   useEffect(() => {
@@ -32,6 +33,8 @@ export function JobStatusPanel({ job }: { job: JobDto }) {
 
   return (
     <div className="grid gap-5">
+      <JobGenerationControls job={job} />
+
       <dl className="grid gap-4 rounded border border-stone-200 bg-white p-6">
         <div>
           <dt className="text-sm text-stone-500">Status</dt>

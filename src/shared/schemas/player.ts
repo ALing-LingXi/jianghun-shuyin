@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { PART_STATUSES } from "@/shared/types/entities";
+import {
+  JOB_STAGES,
+  JOB_STATUSES,
+  PART_STATUSES,
+} from "@/shared/types/entities";
 
 export const playerPartSchema = z.object({
   id: z.string().uuid(),
@@ -13,6 +17,15 @@ export const playerPartSchema = z.object({
 
 export const playerSchema = z.object({
   bookId: z.string().uuid(),
+  latestJob: z
+    .object({
+      id: z.string().uuid(),
+      status: z.enum(JOB_STATUSES),
+      stage: z.enum(JOB_STAGES),
+      progress: z.number().int().min(0).max(100),
+    })
+    .nullable()
+    .default(null),
   parts: z.array(playerPartSchema),
 });
 

@@ -106,6 +106,16 @@ export class DrizzleJobRepository implements JobRepository {
     return row ? toJob(row) : null;
   }
 
+  async listByBookId(bookId: string): Promise<Job[]> {
+    return this.db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.bookId, bookId))
+      .orderBy(asc(jobs.createdAt))
+      .all()
+      .map(toJob);
+  }
+
   async updateById(id: string, input: UpdateJobInput): Promise<Job | null> {
     const current = await this.findById(id);
     if (!current) {
@@ -278,6 +288,10 @@ export class DrizzleChunkRepository implements ChunkRepository {
 
     this.db.update(chunks).set(updated).where(eq(chunks.id, id)).run();
     return updated;
+  }
+
+  async deleteById(id: string): Promise<void> {
+    this.db.delete(chunks).where(eq(chunks.id, id)).run();
   }
 
   async deleteByPartId(partId: string): Promise<void> {

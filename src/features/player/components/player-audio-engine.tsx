@@ -17,7 +17,10 @@ export function PlayerAudioEngine() {
   const parts = usePlayerStore((state) => state.parts);
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const seekTargetSeconds = usePlayerStore((state) => state.seekTargetSeconds);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
+  const setPlaybackTime = usePlayerStore((state) => state.setPlaybackTime);
+  const clearSeekTarget = usePlayerStore((state) => state.clearSeekTarget);
   const goToNext = usePlayerStore((state) => state.goToNext);
 
   const currentPart = useMemo(() => {
@@ -35,6 +38,7 @@ export function PlayerAudioEngine() {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
+      setPlaybackTime({ currentTimeSeconds: 0, durationSeconds: null });
       return;
     }
 
@@ -42,8 +46,24 @@ export function PlayerAudioEngine() {
     if (audio.src !== nextSrc) {
       audio.src = currentPart.audioUrl;
       audio.load();
+      setPlaybackTime({ currentTimeSeconds: 0, durationSeconds: null });
     }
-  }, [currentPart]);
+  }, [currentPart, setPlaybackTime]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentPart || seekTargetSeconds === null) {
+      return;
+    }
+
+    if (Number.isFinite(audio.duration)) {
+      audio.currentTime = Math.min(seekTargetSeconds, audio.duration);
+    } else {
+      audio.currentTime = seekTargetSeconds;
+    }
+
+    clearSeekTarget();
+  }, [clearSeekTarget, currentPart, seekTargetSeconds]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -71,6 +91,30 @@ export function PlayerAudioEngine() {
       preload="metadata"
       onPlay={() => setPlaying(true)}
       onPause={() => setPlaying(false)}
+      onLoadedMetadata={(event) =>
+        setPlaybackTime({
+          currentTimeSeconds: event.currentTarget.currentTime,
+          durationSeconds: Number.isFinite(event.currentTarget.duration)
+            ? event.currentTarget.duration
+            : null,
+        })
+      }
+      onDurationChange={(event) =>
+        setPlaybackTime({
+          currentTimeSeconds: event.currentTarget.currentTime,
+          durationSeconds: Number.isFinite(event.currentTarget.duration)
+            ? event.currentTarget.duration
+            : null,
+        })
+      }
+      onTimeUpdate={(event) =>
+        setPlaybackTime({
+          currentTimeSeconds: event.currentTarget.currentTime,
+          durationSeconds: Number.isFinite(event.currentTarget.duration)
+            ? event.currentTarget.duration
+            : null,
+        })
+      }
       onEnded={goToNext}
     />
   );

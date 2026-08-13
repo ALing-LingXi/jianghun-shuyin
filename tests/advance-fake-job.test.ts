@@ -60,4 +60,16 @@ describe("advanceFakeJob", () => {
       ),
     ).toBeNull();
   });
+
+  it("does not advance paused jobs", () => {
+    expect(
+      advanceFakeJob(
+        createJob({
+          status: "paused",
+          stage: "tts",
+          progress: 85,
+        }),
+      ),
+    ).toBeNull();
+  });
 });

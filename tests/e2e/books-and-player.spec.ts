@@ -74,6 +74,7 @@ test.describe("books and player flows", () => {
     });
     await expect(page.getByTestId("current-part-title")).toHaveText("Chapter 1");
     await expect(page.locator("audio")).toHaveCount(1);
+    await expect(page.getByTestId("player-progress")).toBeDisabled();
 
     await page.getByTestId("player-toggle").click();
     await expect(page.getByTestId("player-toggle")).toContainText("Pause");

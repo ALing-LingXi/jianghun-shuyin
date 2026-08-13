@@ -33,6 +33,7 @@ export type RunPipelineJobDeps = {
   audio: AudioAssembler;
   ttsLimiter?: Limiter;
   ttsChunkConcurrency?: number;
+  ttsRetryDelaysMs?: readonly number[];
   assembleLimiter?: Limiter;
 };
 
@@ -63,7 +64,7 @@ export async function runPipelineJob(
 ): Promise<void> {
   const job = await deps.jobs.findById(jobId);
 
-  if (!job || TERMINAL_STATUSES.has(job.status)) {
+  if (!job || job.status === "paused" || TERMINAL_STATUSES.has(job.status)) {
     return;
   }
 
@@ -141,6 +142,10 @@ async function decodeStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const raw = await deps.storage.readTextSource(sourcePath);
   decodeText(raw);
 
@@ -156,6 +161,10 @@ async function cleaningStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const raw = await deps.storage.readTextSource(sourcePath);
   const decoded = decodeText(raw);
   const cleaned = cleanText(decoded.text);
@@ -178,6 +187,10 @@ async function chapterDetectionStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const raw = await deps.storage.readTextSource(sourcePath);
   const decoded = decodeText(raw);
   const cleaned = cleanText(decoded.text);
@@ -195,6 +208,10 @@ async function planningStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const parsed = await parseSourceText(deps.storage, sourcePath);
 
   await deps.storage.saveTextSource({
@@ -238,6 +255,10 @@ async function processNextPartStage(
   job: Job,
   sourcePath: string,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const parsed = await parseSourceText(deps.storage, sourcePath);
   const parts = await deps.parts.listByBookId(job.bookId);
 
@@ -252,6 +273,10 @@ async function processNextPartStage(
   );
 
   if (!nextPart) {
+    if (await shouldStopJob(deps, job.id)) {
+      return;
+    }
+
     await deps.jobs.updateById(job.id, {
       stage: "assembling",
       progress: STAGE_PROGRESS.assembling,
@@ -269,8 +294,28 @@ async function processNextPartStage(
     return;
   }
 
+  if (nextPart.status === "assembling") {
+    try {
+      await assemblePart(deps, job, nextPart);
+    } catch (error) {
+      await markPartFailed(deps, nextPart, toErrorMessage(error));
+    }
+
+    if (await shouldStopJob(deps, job.id)) {
+      return;
+    }
+
+    await updateJobChapterProgress(deps, job);
+    return;
+  }
+
   await clearPartAudioOutputs(deps, nextPart);
   await deps.chunks.deleteByPartId(nextPart.id);
+
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   await deps.parts.updateById(nextPart.id, {
     status: "tts",
     audioPath: null,
@@ -290,8 +335,16 @@ async function processNextPartStage(
       pitch: job.pitch || DEFAULT_TTS_PITCH,
       concurrency: deps.ttsChunkConcurrency,
       ttsLimiter: deps.ttsLimiter,
+      retryDelaysMs: deps.ttsRetryDelaysMs,
+      shouldContinue: async () => !(await shouldStopJob(deps, job.id)),
+      discardAudio: (audioPath) => safeDeleteFile(deps, audioPath),
+      stopOnFailure: true,
     },
   );
+
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
 
   if (result.failedCount > 0) {
     const failedChunks = await deps.chunks.listByPartId(nextPart.id);
@@ -309,10 +362,18 @@ async function processNextPartStage(
 
   await deps.parts.updateById(nextPart.id, { status: "assembling" });
 
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   try {
-    await assemblePart(deps, nextPart);
+    await assemblePart(deps, job, nextPart);
   } catch (error) {
     await markPartFailed(deps, nextPart, toErrorMessage(error));
+  }
+
+  if (await shouldStopJob(deps, job.id)) {
+    return;
   }
 
   await updateJobChapterProgress(deps, job);
@@ -322,6 +383,10 @@ async function finalizeJobStage(
   deps: RunPipelineJobDeps,
   job: Job,
 ): Promise<void> {
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const parts = await deps.parts.listByBookId(job.bookId);
 
   if (parts.length === 0) {
@@ -382,6 +447,8 @@ async function markPartFailed(
   part: Part,
   reason: string,
 ): Promise<void> {
+  await clearPartGeneratedOutputs(deps, part);
+
   await deps.parts.updateById(part.id, {
     status: "failed",
     audioPath: null,
@@ -394,6 +461,14 @@ async function markPartFailed(
     title: part.title,
     errorMessage: reason,
   });
+}
+
+async function clearPartGeneratedOutputs(
+  deps: RunPipelineJobDeps,
+  part: Part,
+): Promise<void> {
+  await clearPartAudioOutputs(deps, part);
+  await deps.chunks.deleteByPartId(part.id);
 }
 
 async function clearPartAudioOutputs(
@@ -476,6 +551,7 @@ function summarizePartFailures(parts: Part[]): string | null {
 
 async function assemblePart(
   deps: RunPipelineJobDeps,
+  job: Job,
   part: Part,
 ): Promise<void> {
   const chunks = [...(await deps.chunks.listByPartId(part.id))].sort(
@@ -493,6 +569,10 @@ async function assemblePart(
     throw new Error(`Part ${part.index} has incomplete chunk ${incompleteChunk.id}`);
   }
 
+  if (await shouldStopJob(deps, job.id)) {
+    return;
+  }
+
   const assemble = () =>
     deps.audio.assemblePart({
       partId: part.id,
@@ -503,6 +583,11 @@ async function assemblePart(
     ? await deps.assembleLimiter(assemble)
     : await assemble();
 
+  if (await shouldStopJob(deps, job.id)) {
+    await safeDeleteFile(deps, assembled.audioPath);
+    return;
+  }
+
   await deps.parts.updateById(part.id, {
     audioPath: assembled.audioPath,
     durationSeconds: assembled.durationSeconds,
@@ -510,6 +595,14 @@ async function assemblePart(
   });
 
   await clearChunkAudioOutputs(deps, part);
+}
+
+async function shouldStopJob(
+  deps: Pick<RunPipelineJobDeps, "jobs">,
+  jobId: string,
+): Promise<boolean> {
+  const job = await deps.jobs.findById(jobId);
+  return !job || job.status === "paused" || TERMINAL_STATUSES.has(job.status);
 }
 
 async function parseSourceText(

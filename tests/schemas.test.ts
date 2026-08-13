@@ -57,6 +57,22 @@ describe("shared schemas", () => {
   });
 
   it("rejects invalid job progress and missing upload content", () => {
+    expect(
+      jobSchema.parse({
+        id: jobId,
+        bookId,
+        voice: "zh-CN-YunxiNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+        status: "paused",
+        stage: "tts",
+        progress: 85,
+        errorMessage: null,
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    ).toMatchObject({ status: "paused", parts: [] });
+
     expect(() =>
       createJobSchema.parse({
         bookId,
@@ -145,6 +161,12 @@ describe("shared schemas", () => {
     expect(
       playerSchema.parse({
         bookId,
+        latestJob: {
+          id: jobId,
+          status: "paused",
+          stage: "tts",
+          progress: 85,
+        },
         parts: [
           {
             id: "c53a96af-2a92-4fc0-8989-9d1fa1f9f3bd",

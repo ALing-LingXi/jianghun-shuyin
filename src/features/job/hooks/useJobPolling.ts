@@ -21,6 +21,7 @@ export function getJobPollingInterval(status?: JobStatus): number | false {
   if (
     status === "completed" ||
     status === "completed_with_errors" ||
+    status === "paused" ||
     status === "failed" ||
     status === "cancelled"
   ) {

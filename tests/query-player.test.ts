@@ -4,6 +4,7 @@ import {
   createDatabaseClient,
   DrizzleBookRepository,
   DrizzleChunkRepository,
+  DrizzleJobRepository,
   DrizzlePartRepository,
   initializeDatabase,
 } from "../src/server/infrastructure/db";
@@ -25,9 +26,19 @@ describe("queryPlayer", () => {
     const books = new DrizzleBookRepository(client.db);
     const parts = new DrizzlePartRepository(client.db);
     const chunks = new DrizzleChunkRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
     const book = await books.create({
       title: "Test Book",
       sourcePath: "storage/sources/book.txt",
+    });
+    const job = await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+      status: "processing",
+      stage: "tts",
+      progress: 85,
     });
     await parts.create({
       bookId: book.id,
@@ -67,10 +78,16 @@ describe("queryPlayer", () => {
       errorMessage: "No audio was received.",
     });
 
-    const result = await queryPlayer({ books, parts, chunks }, book.id);
+    const result = await queryPlayer({ books, jobs, parts, chunks }, book.id);
 
     expect(result).toMatchObject({
       bookId: book.id,
+      latestJob: {
+        id: job.id,
+        status: "processing",
+        stage: "tts",
+        progress: 85,
+      },
       parts: [
         {
           index: 0,

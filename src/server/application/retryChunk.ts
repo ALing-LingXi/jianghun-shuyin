@@ -1,13 +1,11 @@
 import type { Chunk } from "@/server/domain/entities";
 import type { ChunkRepository } from "@/server/ports/repositories";
-import type { FileStorage } from "@/server/ports/storage";
 import type { TTSProvider } from "@/server/ports/tts";
 import { createChunkCacheKey } from "@/server/tts/chunkCache";
 import type { Limiter } from "@/server/tts/concurrency";
 
 export type RetryChunkDeps = {
   chunks: ChunkRepository;
-  storage: FileStorage;
   tts: TTSProvider;
   ttsLimiter?: Limiter;
 };
@@ -65,28 +63,6 @@ export async function retryChunk(
   }
 
   const nextRetryCount = chunk.retryCount + 1;
-  const cached = await deps.chunks.findCompletedByTextHash(cacheKey);
-  if (cached?.audioPath) {
-    if (await deps.storage.exists(cached.audioPath)) {
-      const updatedFromCache = await deps.chunks.updateById(chunk.id, {
-        audioPath: cached.audioPath,
-        status: "completed",
-        retryCount: nextRetryCount,
-        errorMessage: null,
-      });
-
-      if (!updatedFromCache) {
-        throw new RetryChunkError("CHUNK_NOT_FOUND", "Chunk not found");
-      }
-
-      return updatedFromCache;
-    }
-
-    await deps.chunks.updateById(cached.id, {
-      audioPath: null,
-    });
-  }
-
   await deps.chunks.updateById(chunk.id, {
     status: "processing",
     retryCount: nextRetryCount,

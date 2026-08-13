@@ -33,12 +33,17 @@ export function usePlayerQuery(bookId: string) {
   return useQuery<PlayerDto, PlayerApiError>({
     queryKey: ["player", bookId],
     queryFn: () => fetchPlayer(bookId),
-    refetchInterval: (query) =>
-      query.state.data?.parts.some((part) =>
+    refetchInterval: (query) => {
+      if (query.state.data?.latestJob?.status === "paused") {
+        return false;
+      }
+
+      return query.state.data?.parts.some((part) =>
         ["pending", "processing", "tts", "assembling"].includes(part.status),
       )
         ? 3000
-        : false,
+        : false;
+    },
     refetchIntervalInBackground: true,
     retry: false,
   });

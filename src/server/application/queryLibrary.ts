@@ -92,6 +92,7 @@ function deriveBookStatus(
     case "queued":
       return "pending";
     case "processing":
+    case "paused":
       return "processing";
     case "completed":
     case "completed_with_errors":

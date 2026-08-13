@@ -67,6 +67,7 @@ describe("LocalJobRunner", () => {
       storageRoot,
       tts: createFakeTts(),
       audio: createFakeAudio(),
+      intervalMs: 1000,
     });
     runners.push(runner);
 
@@ -74,25 +75,20 @@ describe("LocalJobRunner", () => {
     await waitFor(async () => {
       const job = await jobs.findById(result.jobId);
       return (
-        job?.status === "processing" &&
-        job.stage === "decoding" &&
-        job.progress === 10
+        job !== null &&
+        job.status !== "queued" &&
+        job.progress >= 10
       );
     });
 
-    for (let step = 0; step < 6; step += 1) {
-      await runner.runOnce();
-      await wait(1);
-    }
-
-    await waitFor(async () => {
+    await runRunnerUntil(runner, async () => {
       const job = await jobs.findById(result.jobId);
       return (
         job?.status === "completed" &&
         job.stage === "completed" &&
         job.progress === 100
       );
-    });
+    }, 2000);
   });
 
   it("advances multiple jobs in the same tick without waiting for the slowest job", async () => {
@@ -258,6 +254,47 @@ describe("LocalJobRunner", () => {
       return job?.status === "processing" && job.progress === 10;
     });
   });
+
+  it("does not run paused jobs", async () => {
+    const databasePath = createTempDatabasePath();
+    const storageRoot = path.dirname(databasePath);
+    const client = createDatabaseClient(databasePath);
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const storage = new LocalStorage(storageRoot);
+    const result = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Paused worker test",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+    await jobs.updateById(result.jobId, {
+      status: "paused",
+      stage: "tts",
+      progress: 85,
+    });
+    const runner = createLocalJobRunner({
+      databasePath,
+      storageRoot,
+      tts: createFakeTts(),
+      audio: createFakeAudio(),
+    });
+    runners.push(runner);
+
+    await expect(runner.runOnce()).resolves.toBe(0);
+    await expect(jobs.findById(result.jobId)).resolves.toMatchObject({
+      status: "paused",
+      stage: "tts",
+      progress: 85,
+    });
+  });
 });
 
 function createFakeTts(
@@ -299,6 +336,25 @@ async function waitFor(
   }
 
   throw new Error("Timed out waiting for condition");
+}
+
+async function runRunnerUntil(
+  runner: LocalJobRunner,
+  predicate: () => Promise<boolean>,
+  timeoutMs = 1000,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await runner.runOnce();
+    await wait(10);
+
+    if (await predicate()) {
+      return;
+    }
+  }
+
+  throw new Error("Timed out waiting for runner condition");
 }
 
 function createFakeAudio(): AudioAssembler {

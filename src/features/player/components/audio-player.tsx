@@ -9,6 +9,7 @@ import {
   SkipBack,
   SkipForward,
 } from "lucide-react";
+import { JobGenerationControls } from "@/features/job/components/job-generation-controls";
 import type { PlayerDto, PlayerPartDto } from "@/shared/schemas/player";
 import { useRetryPart } from "../hooks/usePlayerQuery";
 import { usePlayerStore } from "../player-store";
@@ -17,11 +18,16 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
   const retryPart = useRetryPart(player.bookId);
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const currentTimeSeconds = usePlayerStore(
+    (state) => state.currentTimeSeconds,
+  );
+  const durationSeconds = usePlayerStore((state) => state.durationSeconds);
   const stopAfterCurrent = usePlayerStore((state) => state.stopAfterCurrent);
   const sleepTimerEndsAt = usePlayerStore((state) => state.sleepTimerEndsAt);
   const setPartId = usePlayerStore((state) => state.setPartId);
   const setParts = usePlayerStore((state) => state.setParts);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
+  const requestSeek = usePlayerStore((state) => state.requestSeek);
   const setStopAfterCurrent = usePlayerStore(
     (state) => state.setStopAfterCurrent,
   );
@@ -47,6 +53,18 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
     player.parts[0];
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < playableParts.length - 1;
+  const seekDurationSeconds =
+    typeof durationSeconds === "number" &&
+    Number.isFinite(durationSeconds) &&
+    durationSeconds > 0
+      ? durationSeconds
+      : null;
+  const canSeek = Boolean(currentPart) && seekDurationSeconds !== null;
+  const progressMax =
+    seekDurationSeconds === null ? 0 : Math.floor(seekDurationSeconds);
+  const progressValue = canSeek
+    ? Math.min(Math.floor(currentTimeSeconds), progressMax)
+    : 0;
   const pendingCount = player.parts.filter((part) =>
     ["pending", "processing", "tts", "assembling"].includes(part.status),
   ).length;
@@ -104,6 +122,10 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
         </p>
       </div>
 
+      {player.latestJob ? (
+        <JobGenerationControls job={player.latestJob} bookId={player.bookId} />
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -156,6 +178,25 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
           <Clock className="h-4 w-4" aria-hidden="true" />
           Stop after chapter
         </button>
+      </div>
+
+      <div className="grid gap-2 border border-stone-200 p-3">
+        <div className="flex items-center justify-between gap-3 text-xs text-stone-600">
+          <span>{formatTime(currentTimeSeconds)}</span>
+          <span>{formatTime(durationSeconds)}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={progressMax}
+          step={1}
+          value={progressValue}
+          className="w-full accent-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Playback progress"
+          data-testid="player-progress"
+          disabled={!canSeek}
+          onChange={(event) => requestSeek(Number(event.currentTarget.value))}
+        />
       </div>
 
       <div className="grid gap-2 border border-stone-200 p-3">
@@ -259,6 +300,18 @@ function ChapterRow({
 
 function isPlayablePart(part: PlayerPartDto): boolean {
   return part.status === "completed" && Boolean(part.audioUrl);
+}
+
+function formatTime(seconds: number | null): string {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
 function statusLabel(status: PlayerPartDto["status"]): string {

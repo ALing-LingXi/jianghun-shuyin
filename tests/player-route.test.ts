@@ -39,6 +39,7 @@ afterEach(async () => {
 function createPlayer(overrides: Partial<PlayerDto> = {}): PlayerDto {
   return {
     bookId,
+    latestJob: null,
     parts: [
       {
         id: partId,

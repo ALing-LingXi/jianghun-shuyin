@@ -49,7 +49,18 @@ async function createTestContext() {
   const tts = createFakeTts(storage);
   const audio = createFakeAudio();
 
-  return { client, storageRoot, books, jobs, parts, chunks, storage, tts, audio };
+  return {
+    client,
+    storageRoot,
+    books,
+    jobs,
+    parts,
+    chunks,
+    storage,
+    tts,
+    audio,
+    ttsRetryDelaysMs: [0],
+  };
 }
 
 async function createQueuedJob(
@@ -254,7 +265,7 @@ describe("runPipelineJob", () => {
     expect(chunks.every((chunk) => chunk.audioPath === null)).toBe(true);
   });
 
-  it("keeps chunk audio when part assembly fails", async () => {
+  it("cleans part audio and chunk records when part assembly fails", async () => {
     const context = await createTestContext();
     context.audio = createFakeAudio({
       assemblePart: async () => {
@@ -279,9 +290,10 @@ describe("runPipelineJob", () => {
     await runUntilTerminal(context, result.jobId);
 
     const chunkRows = context.client.db.select().from(chunksTable).all();
-    expect(chunkRows).toHaveLength(1);
-    expect(chunkRows[0].audioPath).toBeTruthy();
-    await expect(access(chunkRows[0].audioPath!)).resolves.toBeUndefined();
+    expect(chunkRows).toHaveLength(0);
+    await expect(readdir(path.join(context.storageRoot, "chunks"))).resolves.toEqual(
+      [],
+    );
   });
 
   it("keeps a failed TTS chapter unavailable and continues later chapters", async () => {
@@ -316,6 +328,49 @@ describe("runPipelineJob", () => {
     expect(partRows.map((part) => part.status)).toEqual(["failed", "completed"]);
     expect(partRows[0].audioPath).toBeNull();
     expect(partRows[1].audioPath).toContain("storage/parts");
+    await expect(context.chunks.listByPartId(partRows[0].id)).resolves.toEqual([]);
+  });
+
+  it("cleans a failed TTS part and skips to the next part", async () => {
+    const context = await createTestContext();
+    let calls = 0;
+    context.tts = {
+      synthesize: async (input) => {
+        calls += 1;
+        if (calls <= 5) {
+          throw new Error("No audio was received.");
+        }
+
+        const audioPath = await context.storage.saveChunkAudio({
+          content: new Uint8Array([0x49, 0x44, 0x33, 0x04]),
+          fileName: input.fileName ?? "chunk.mp3",
+        });
+
+        return {
+          audioPath,
+          byteLength: 4,
+          voice: input.voice,
+          rate: input.rate,
+          pitch: input.pitch,
+        };
+      },
+    };
+    const result = await createQueuedJob(context);
+
+    await runUntilTerminal(context, result.jobId);
+
+    const partRows = context.client.db.select().from(partsTable).all();
+    expect(partRows.map((part) => part.status)).toEqual(["failed", "completed"]);
+    await expect(context.chunks.listByPartId(partRows[0].id)).resolves.toEqual([]);
+    await expect(readdir(path.join(context.storageRoot, "chunks"))).resolves.toEqual(
+      [],
+    );
+    await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
+      status: "completed_with_errors",
+      stage: "completed",
+      progress: 100,
+    });
+    expect(calls).toBeGreaterThan(1);
   });
 
   it("uses the voice selected when the job was created", async () => {
@@ -346,6 +401,25 @@ describe("runPipelineJob", () => {
         pitch: "+5Hz",
       }),
     );
+  });
+
+  it("does not advance paused jobs", async () => {
+    const context = await createTestContext();
+    const result = await createQueuedJob(context);
+    await context.jobs.updateById(result.jobId, {
+      status: "paused",
+      stage: "planning",
+      progress: 80,
+    });
+
+    await runPipelineJob(context, result.jobId);
+
+    await expect(context.jobs.findById(result.jobId)).resolves.toMatchObject({
+      status: "paused",
+      stage: "planning",
+      progress: 80,
+    });
+    await expect(context.parts.listByBookId(result.bookId)).resolves.toEqual([]);
   });
 });
 

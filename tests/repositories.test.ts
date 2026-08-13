@@ -68,6 +68,43 @@ describe("Drizzle repositories", () => {
     await expect(jobs.findById("missing-job")).resolves.toBeNull();
   });
 
+  it("lists jobs for a book in creation order", async () => {
+    const { db } = createTestDatabase();
+    const books = new DrizzleBookRepository(db);
+    const jobs = new DrizzleJobRepository(db);
+    const book = await books.create({
+      title: "Book A",
+      sourcePath: "storage/sources/book-a.txt",
+    });
+    const otherBook = await books.create({
+      title: "Book B",
+      sourcePath: "storage/sources/book-b.txt",
+    });
+    const first = await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+    });
+    const second = await jobs.create({
+      bookId: book.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+      status: "completed",
+      stage: "completed",
+      progress: 100,
+    });
+    await jobs.create({
+      bookId: otherBook.id,
+      voice: "zh-CN-YunxiNeural",
+      rate: "+0%",
+      pitch: "+0Hz",
+    });
+
+    await expect(jobs.listByBookId(book.id)).resolves.toEqual([first, second]);
+  });
+
   it("creates and finds a part for an existing book", async () => {
     const { db } = createTestDatabase();
     const books = new DrizzleBookRepository(db);
