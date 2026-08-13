@@ -7,7 +7,13 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
     trace: "on-first-retry",
+  },
+  webServer: {
+    command: "pnpm dev",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    url: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
   },
 });

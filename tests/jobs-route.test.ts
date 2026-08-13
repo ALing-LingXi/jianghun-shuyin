@@ -36,7 +36,18 @@ describe("GET /api/jobs/[jobId]", () => {
   });
 
   it("returns a job dto", async () => {
-    queryJob.mockResolvedValueOnce(createJob());
+    queryJob.mockResolvedValueOnce({
+      ...createJob(),
+      parts: [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          index: 0,
+          title: "第一章 风起",
+          status: "completed",
+          durationSeconds: 120,
+        },
+      ],
+    });
 
     const response = await GET(new Request("http://localhost/api/jobs/1"), {
       params: Promise.resolve({
@@ -51,6 +62,12 @@ describe("GET /api/jobs/[jobId]", () => {
       status: "queued",
       stage: "decoding",
       progress: 0,
+      parts: [
+        {
+          title: "第一章 风起",
+          status: "completed",
+        },
+      ],
     });
   });
 

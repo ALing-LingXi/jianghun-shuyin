@@ -41,6 +41,10 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
     return index >= 0 ? index : 0;
   }, [partId, playableParts]);
   const currentPart = playableParts[currentIndex] ?? playableParts[0];
+  const displayPart =
+    player.parts.find((part) => part.id === partId) ??
+    currentPart ??
+    player.parts[0];
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < playableParts.length - 1;
   const pendingCount = player.parts.filter((part) =>
@@ -88,10 +92,11 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
       <div className="grid gap-2">
         <p className="text-sm text-stone-500">Current chapter</p>
         <h2
-          className="text-xl font-semibold text-stone-900"
+          className="truncate text-xl font-semibold text-stone-900"
           data-testid="current-part-title"
+          title={displayPart?.title}
         >
-          {currentPart?.title ?? "No playable chapter yet"}
+          {displayPart?.title ?? "No chapters planned yet"}
         </h2>
         <p className="text-sm text-stone-600">
           Playable: {playableParts.length}/{player.parts.length}
@@ -211,19 +216,22 @@ function ChapterRow({
   const isPlayable = isPlayablePart(part);
 
   return (
-    <li className="grid gap-2 border border-stone-200 px-3 py-2 text-sm">
+    <li className="grid min-w-0 gap-2 border border-stone-200 px-3 py-2 text-sm">
       <button
         type="button"
         data-testid={`player-part-${part.index + 1}`}
-        className="text-left disabled:cursor-not-allowed disabled:text-stone-400"
+        className="min-w-0 text-left disabled:cursor-not-allowed disabled:text-stone-400"
         onClick={onPlay}
         disabled={!isPlayable}
+        title={part.title}
       >
-        <span className="font-medium">
-          {part.index + 1}. {part.title}
-        </span>
-        <span className="ml-2 text-xs text-stone-500">
-          {statusLabel(part.status)}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {part.index + 1}. {part.title}
+          </span>
+          <span className="shrink-0 text-xs text-stone-500">
+            {statusLabel(part.status)}
+          </span>
         </span>
         {part.errorMessage ? (
           <span className="mt-1 block text-xs leading-5 text-red-700">

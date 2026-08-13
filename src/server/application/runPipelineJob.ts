@@ -16,6 +16,7 @@ import {
   planParts,
 } from "@/server/pipeline";
 import { synthesizePartChunks } from "@/server/tts/chunkSynthesis";
+import type { Limiter } from "@/server/tts/concurrency";
 import {
   DEFAULT_TTS_PITCH,
   DEFAULT_TTS_RATE,
@@ -30,6 +31,9 @@ export type RunPipelineJobDeps = {
   storage: FileStorage;
   tts: TTSProvider;
   audio: AudioAssembler;
+  ttsLimiter?: Limiter;
+  ttsChunkConcurrency?: number;
+  assembleLimiter?: Limiter;
 };
 
 const STAGE_PROGRESS = {
@@ -241,6 +245,8 @@ async function processNextPartStage(
     throw new Error(`No parts found for book ${job.bookId}`);
   }
 
+  await clearCompletedPartChunkAudioOutputs(deps, parts);
+
   const nextPart = parts.find((part) =>
     ["pending", "processing", "tts", "assembling"].includes(part.status),
   );
@@ -282,6 +288,8 @@ async function processNextPartStage(
       voice: job.voice || DEFAULT_TTS_VOICE,
       rate: job.rate || DEFAULT_TTS_RATE,
       pitch: job.pitch || DEFAULT_TTS_PITCH,
+      concurrency: deps.ttsChunkConcurrency,
+      ttsLimiter: deps.ttsLimiter,
     },
   );
 
@@ -374,7 +382,6 @@ async function markPartFailed(
   part: Part,
   reason: string,
 ): Promise<void> {
-  await clearPartAudioOutputs(deps, part);
   await deps.parts.updateById(part.id, {
     status: "failed",
     audioPath: null,
@@ -399,11 +406,11 @@ async function clearPartAudioOutputs(
     chunks
       .map((chunk) => chunk.audioPath)
       .filter((audioPath): audioPath is string => Boolean(audioPath))
-      .map((audioPath) => deps.storage.deleteFile(audioPath)),
+      .map((audioPath) => safeDeleteFile(deps, audioPath)),
   );
 
   if (part.audioPath) {
-    await deps.storage.deleteFile(part.audioPath);
+    await safeDeleteFile(deps, part.audioPath);
   }
 
   await Promise.all(
@@ -415,6 +422,53 @@ async function clearPartAudioOutputs(
   );
 }
 
+async function clearChunkAudioOutputs(
+  deps: RunPipelineJobDeps,
+  part: Part,
+): Promise<void> {
+  const chunks = await deps.chunks.listByPartId(part.id);
+
+  await Promise.all(
+    chunks
+      .map((chunk) => chunk.audioPath)
+      .filter((audioPath): audioPath is string => Boolean(audioPath))
+      .map((audioPath) => safeDeleteFile(deps, audioPath)),
+  );
+
+  await Promise.all(
+    chunks.map((chunk) =>
+      deps.chunks.updateById(chunk.id, {
+        audioPath: null,
+      }),
+    ),
+  );
+}
+
+async function clearCompletedPartChunkAudioOutputs(
+  deps: RunPipelineJobDeps,
+  parts: Part[],
+): Promise<void> {
+  await Promise.all(
+    parts
+      .filter((part) => part.status === "completed")
+      .map((part) => clearChunkAudioOutputs(deps, part)),
+  );
+}
+
+async function safeDeleteFile(
+  deps: RunPipelineJobDeps,
+  audioPath: string,
+): Promise<void> {
+  try {
+    await deps.storage.deleteFile(audioPath);
+  } catch (error) {
+    console.warn("[worker] audio cleanup skipped", {
+      audioPath,
+      errorMessage: toErrorMessage(error),
+    });
+  }
+}
+
 function summarizePartFailures(parts: Part[]): string | null {
   const failedCount = parts.filter((part) => part.status === "failed").length;
   return failedCount > 0 ? `${failedCount} chapter(s) failed.` : null;
@@ -424,7 +478,9 @@ async function assemblePart(
   deps: RunPipelineJobDeps,
   part: Part,
 ): Promise<void> {
-  const chunks = await deps.chunks.listByPartId(part.id);
+  const chunks = [...(await deps.chunks.listByPartId(part.id))].sort(
+    (left, right) => left.index - right.index,
+  );
 
   if (chunks.length === 0) {
     throw new Error(`Part ${part.index} has no chunks to assemble`);
@@ -437,17 +493,23 @@ async function assemblePart(
     throw new Error(`Part ${part.index} has incomplete chunk ${incompleteChunk.id}`);
   }
 
-  const assembled = await deps.audio.assemblePart({
-    partId: part.id,
-    chunkAudioPaths: chunks.map((chunk) => chunk.audioPath!),
-    fileName: `${part.id}.mp3`,
-  });
+  const assemble = () =>
+    deps.audio.assemblePart({
+      partId: part.id,
+      chunkAudioPaths: chunks.map((chunk) => chunk.audioPath!),
+      fileName: `${part.id}.mp3`,
+    });
+  const assembled = deps.assembleLimiter
+    ? await deps.assembleLimiter(assemble)
+    : await assemble();
 
   await deps.parts.updateById(part.id, {
     audioPath: assembled.audioPath,
     durationSeconds: assembled.durationSeconds,
     status: "completed",
   });
+
+  await clearChunkAudioOutputs(deps, part);
 }
 
 async function parseSourceText(

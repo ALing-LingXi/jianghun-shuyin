@@ -8,6 +8,11 @@ import {
 import type { AudioAssembler } from "../ports/audio";
 import type { JobRunner } from "../ports/jobRunner";
 import type { TTSProvider } from "../ports/tts";
+import { createLimiter } from "../tts/concurrency";
+import {
+  DEFAULT_GLOBAL_TTS_CONCURRENCY,
+  DEFAULT_TTS_CHUNK_CONCURRENCY,
+} from "../tts/chunkSynthesis";
 import {
   createDatabaseClient,
   type DatabaseClient,
@@ -28,11 +33,17 @@ export type LocalJobRunnerOptions = {
   databasePath?: string;
   storageRoot?: string;
   intervalMs?: number;
+  jobConcurrency?: number;
+  ttsChunkConcurrency?: number;
+  globalTtsConcurrency?: number;
+  assembleConcurrency?: number;
   tts?: TTSProvider;
   audio?: AudioAssembler;
 };
 
 const DEFAULT_INTERVAL_MS = 1000;
+const DEFAULT_JOB_CONCURRENCY = 2;
+const DEFAULT_ASSEMBLE_CONCURRENCY = 1;
 const DEFAULT_STORAGE_ROOT = path.join(process.cwd(), "storage");
 const DEFAULT_DATABASE_PATH = path.join(
   DEFAULT_STORAGE_ROOT,
@@ -43,11 +54,13 @@ export class LocalJobRunner implements JobRunner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private isTicking = false;
   private isStopped = false;
+  private readonly inFlightJobIds = new Set<string>();
 
   constructor(
     private readonly client: DatabaseClient,
     private readonly deps: RunPipelineJobDeps,
     private readonly intervalMs = DEFAULT_INTERVAL_MS,
+    private readonly jobConcurrency = DEFAULT_JOB_CONCURRENCY,
   ) {}
 
   start(): void {
@@ -91,24 +104,64 @@ export class LocalJobRunner implements JobRunner {
     this.isTicking = true;
 
     try {
+      const availableSlots = this.jobConcurrency - this.inFlightJobIds.size;
+      if (availableSlots <= 0) {
+        return 0;
+      }
+
       const activeJobs = this.client.db
-        .select({ id: jobsTable.id })
+        .select({
+          id: jobsTable.id,
+          status: jobsTable.status,
+          createdAt: jobsTable.createdAt,
+        })
         .from(jobsTable)
         .where(inArray(jobsTable.status, ["queued", "processing"]))
         .orderBy(asc(jobsTable.createdAt))
         .all();
-      let updatedCount = 0;
+      const selectedJobs = activeJobs
+        .filter((job) => !this.inFlightJobIds.has(job.id))
+        .sort(compareRunnableJobs)
+        .slice(0, availableSlots);
 
-      for (const row of activeJobs) {
-        await runPipelineJob(this.deps, row.id);
-        updatedCount += 1;
+      for (const job of selectedJobs) {
+        this.inFlightJobIds.add(job.id);
+        void this.runJob(job.id);
       }
 
-      return updatedCount;
+      return selectedJobs.length;
     } finally {
       this.isTicking = false;
     }
   }
+
+  private async runJob(jobId: string): Promise<void> {
+    try {
+      await runPipelineJob(this.deps, jobId);
+    } catch (error) {
+      console.error("[worker] job tick failed", {
+        jobId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Job tick failed",
+      });
+    } finally {
+      this.inFlightJobIds.delete(jobId);
+    }
+  }
+}
+
+function compareRunnableJobs(
+  left: { status: string; createdAt: Date },
+  right: { status: string; createdAt: Date },
+): number {
+  const leftRank = left.status === "queued" ? 0 : 1;
+  const rightRank = right.status === "queued" ? 0 : 1;
+
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  return left.createdAt.getTime() - right.createdAt.getTime();
 }
 
 export function createLocalJobRunner(
@@ -128,6 +181,12 @@ export function createLocalJobRunner(
   const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(storageRoot);
   const tts = options.tts ?? new EdgeTtsProvider({ storage });
+  const ttsLimiter = createLimiter(
+    options.globalTtsConcurrency ?? DEFAULT_GLOBAL_TTS_CONCURRENCY,
+  );
+  const assembleLimiter = createLimiter(
+    options.assembleConcurrency ?? DEFAULT_ASSEMBLE_CONCURRENCY,
+  );
   const audio =
     options.audio ??
     new FfmpegAudio({
@@ -136,7 +195,20 @@ export function createLocalJobRunner(
 
   return new LocalJobRunner(
     client,
-    { books, jobs, parts, chunks, storage, tts, audio },
+    {
+      books,
+      jobs,
+      parts,
+      chunks,
+      storage,
+      tts,
+      audio,
+      assembleLimiter,
+      ttsLimiter,
+      ttsChunkConcurrency:
+        options.ttsChunkConcurrency ?? DEFAULT_TTS_CHUNK_CONCURRENCY,
+    },
     options.intervalMs ?? DEFAULT_INTERVAL_MS,
+    options.jobConcurrency ?? DEFAULT_JOB_CONCURRENCY,
   );
 }

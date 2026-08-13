@@ -1,11 +1,15 @@
 import type { Chunk } from "@/server/domain/entities";
 import type { ChunkRepository } from "@/server/ports/repositories";
+import type { FileStorage } from "@/server/ports/storage";
 import type { TTSProvider } from "@/server/ports/tts";
 import { createChunkCacheKey } from "@/server/tts/chunkCache";
+import type { Limiter } from "@/server/tts/concurrency";
 
 export type RetryChunkDeps = {
   chunks: ChunkRepository;
+  storage: FileStorage;
   tts: TTSProvider;
+  ttsLimiter?: Limiter;
 };
 
 export type RetryChunkInput = {
@@ -63,18 +67,24 @@ export async function retryChunk(
   const nextRetryCount = chunk.retryCount + 1;
   const cached = await deps.chunks.findCompletedByTextHash(cacheKey);
   if (cached?.audioPath) {
-    const updatedFromCache = await deps.chunks.updateById(chunk.id, {
-      audioPath: cached.audioPath,
-      status: "completed",
-      retryCount: nextRetryCount,
-      errorMessage: null,
-    });
+    if (await deps.storage.exists(cached.audioPath)) {
+      const updatedFromCache = await deps.chunks.updateById(chunk.id, {
+        audioPath: cached.audioPath,
+        status: "completed",
+        retryCount: nextRetryCount,
+        errorMessage: null,
+      });
 
-    if (!updatedFromCache) {
-      throw new RetryChunkError("CHUNK_NOT_FOUND", "Chunk not found");
+      if (!updatedFromCache) {
+        throw new RetryChunkError("CHUNK_NOT_FOUND", "Chunk not found");
+      }
+
+      return updatedFromCache;
     }
 
-    return updatedFromCache;
+    await deps.chunks.updateById(cached.id, {
+      audioPath: null,
+    });
   }
 
   await deps.chunks.updateById(chunk.id, {
@@ -85,13 +95,17 @@ export async function retryChunk(
 
   let audio: Awaited<ReturnType<TTSProvider["synthesize"]>>;
   try {
-    audio = await deps.tts.synthesize({
-      text: input.text,
-      voice: input.voice,
-      rate: input.rate,
-      pitch: input.pitch,
-      fileName: `${chunk.partId}-${chunk.index}-retry-${nextRetryCount}.mp3`,
-    });
+    const synthesize = () =>
+      deps.tts.synthesize({
+        text: input.text,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+        fileName: `${chunk.partId}-${chunk.index}-retry-${nextRetryCount}.mp3`,
+      });
+    audio = deps.ttsLimiter
+      ? await deps.ttsLimiter(synthesize)
+      : await synthesize();
   } catch (error) {
     const reason = toErrorMessage(error);
     const failed = await deps.chunks.updateById(chunk.id, {

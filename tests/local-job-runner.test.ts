@@ -9,6 +9,7 @@ import {
   createDatabaseClient,
   DrizzleBookRepository,
   DrizzleJobRepository,
+  DrizzlePartRepository,
   initializeDatabase,
   type DatabaseClient,
 } from "../src/server/infrastructure/db";
@@ -70,27 +71,204 @@ describe("LocalJobRunner", () => {
     runners.push(runner);
 
     await expect(runner.runOnce()).resolves.toBe(1);
-    await expect(jobs.findById(result.jobId)).resolves.toMatchObject({
-      status: "processing",
-      stage: "decoding",
-      progress: 10,
+    await waitFor(async () => {
+      const job = await jobs.findById(result.jobId);
+      return (
+        job?.status === "processing" &&
+        job.stage === "decoding" &&
+        job.progress === 10
+      );
     });
 
     for (let step = 0; step < 6; step += 1) {
       await runner.runOnce();
+      await wait(1);
     }
 
-    await expect(jobs.findById(result.jobId)).resolves.toMatchObject({
-      status: "completed",
-      stage: "completed",
-      progress: 100,
+    await waitFor(async () => {
+      const job = await jobs.findById(result.jobId);
+      return (
+        job?.status === "completed" &&
+        job.stage === "completed" &&
+        job.progress === 100
+      );
+    });
+  });
+
+  it("advances multiple jobs in the same tick without waiting for the slowest job", async () => {
+    const databasePath = createTempDatabasePath();
+    const storageRoot = path.dirname(databasePath);
+    const client = createDatabaseClient(databasePath);
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const parts = new DrizzlePartRepository(client.db);
+    const storage = new LocalStorage(storageRoot);
+    const first = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Slow worker test",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+    const second = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Fast worker test",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    await jobs.updateById(first.jobId, {
+      status: "processing",
+      stage: "tts",
+      progress: 85,
+    });
+    await jobs.updateById(second.jobId, {
+      status: "processing",
+      stage: "tts",
+      progress: 85,
+    });
+    const firstPart = await parts.create({
+      bookId: first.bookId,
+      index: 0,
+      title: "Chapter 1 Start",
+      status: "pending",
+    });
+    await parts.create({
+      bookId: second.bookId,
+      index: 0,
+      title: "Chapter 1 Start",
+      status: "pending",
+    });
+
+    let releaseSlowTts: (() => void) | undefined;
+    let resolveSlowStarted: (() => void) | undefined;
+    const slowTtsBlocked = new Promise<void>((resolve) => {
+      releaseSlowTts = resolve;
+    });
+    const slowTtsStarted = new Promise<void>((resolve) => {
+      resolveSlowStarted = resolve;
+    });
+    const tts = createFakeTts(async (input) => {
+      if (input.fileName?.startsWith(firstPart.id)) {
+        resolveSlowStarted?.();
+        await slowTtsBlocked;
+      }
+
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    });
+    const runner = createLocalJobRunner({
+      databasePath,
+      storageRoot,
+      tts,
+      audio: createFakeAudio(),
+      jobConcurrency: 2,
+    });
+    runners.push(runner);
+
+    const runPromise = runner.runOnce();
+    await slowTtsStarted;
+    await waitFor(async () => {
+      const job = await jobs.findById(second.jobId);
+      return job?.stage === "assembling";
+    });
+    releaseSlowTts?.();
+    await expect(runPromise).resolves.toBe(2);
+  });
+
+  it("does not let older processing jobs starve a queued job", async () => {
+    const databasePath = createTempDatabasePath();
+    const storageRoot = path.dirname(databasePath);
+    const client = createDatabaseClient(databasePath);
+    initializeDatabase(client.db);
+    clients.push(client);
+
+    const books = new DrizzleBookRepository(client.db);
+    const jobs = new DrizzleJobRepository(client.db);
+    const storage = new LocalStorage(storageRoot);
+    const oldProcessingA = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Old processing A",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+    const oldProcessingB = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Old processing B",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+    const queued = await createBookJob(
+      { books, jobs, storage },
+      {
+        title: "Queued worker test",
+        text: "Chapter 1 Start\nThis is body text.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    await jobs.updateById(oldProcessingA.jobId, {
+      status: "processing",
+      stage: "tts",
+      progress: 85,
+    });
+    await jobs.updateById(oldProcessingB.jobId, {
+      status: "processing",
+      stage: "tts",
+      progress: 85,
+    });
+
+    const runner = createLocalJobRunner({
+      databasePath,
+      storageRoot,
+      tts: createFakeTts(),
+      audio: createFakeAudio(),
+      jobConcurrency: 2,
+    });
+    runners.push(runner);
+
+    await expect(runner.runOnce()).resolves.toBe(2);
+    await waitFor(async () => {
+      const job = await jobs.findById(queued.jobId);
+      return job?.status === "processing" && job.progress === 10;
     });
   });
 });
 
-function createFakeTts(): TTSProvider {
+function createFakeTts(
+  synthesize?: TTSProvider["synthesize"],
+): TTSProvider {
   return {
     async synthesize(input) {
+      if (synthesize) {
+        return synthesize(input);
+      }
+
       return {
         audioPath: `storage/chunks/${input.fileName}`,
         byteLength: 4,
@@ -100,6 +278,27 @@ function createFakeTts(): TTSProvider {
       };
     },
   };
+}
+
+async function wait(delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 500,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await predicate()) {
+      return;
+    }
+
+    await wait(5);
+  }
+
+  throw new Error("Timed out waiting for condition");
 }
 
 function createFakeAudio(): AudioAssembler {

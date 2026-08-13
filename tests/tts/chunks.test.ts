@@ -9,6 +9,7 @@ import {
 } from "../../src/server/infrastructure/db";
 import {
   buildChunks,
+  createLimiter,
   createChunkCacheKey,
   synthesizePartChunks,
 } from "../../src/server/tts";
@@ -131,6 +132,98 @@ describe("synthesizePartChunks", () => {
     expect(tts.synthesize).toHaveBeenCalledTimes(result.chunks.length);
   });
 
+  it("limits concurrent chunk synthesis within a part", async () => {
+    const context = await createTestContext();
+    let activeCount = 0;
+    let maxActiveCount = 0;
+    const tts = createFakeTts(async (input) => {
+      activeCount += 1;
+      maxActiveCount = Math.max(maxActiveCount, activeCount);
+      await wait(1);
+      activeCount -= 1;
+
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    });
+
+    await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "one. two. three. four.",
+        voice: "voice-a",
+        rate: "+0%",
+        pitch: "+0Hz",
+        maxCharacters: 6,
+        concurrency: 2,
+      },
+    );
+
+    expect(maxActiveCount).toBeLessThanOrEqual(2);
+  });
+
+  it("shares a global TTS limiter across concurrent part synthesis", async () => {
+    const context = await createTestContext();
+    const secondPart = await context.parts.create({
+      bookId: context.book.id,
+      index: 1,
+      title: "Part 2",
+    });
+    const limiter = createLimiter(3);
+    let activeCount = 0;
+    let maxActiveCount = 0;
+    const tts = createFakeTts(async (input) => {
+      activeCount += 1;
+      maxActiveCount = Math.max(maxActiveCount, activeCount);
+      await wait(1);
+      activeCount -= 1;
+
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    });
+
+    await Promise.all([
+      synthesizePartChunks(
+        { chunks: context.chunks, tts },
+        {
+          partId: context.part.id,
+          text: "one. two. three. four.",
+          voice: "voice-a",
+          rate: "+0%",
+          pitch: "+0Hz",
+          maxCharacters: 6,
+          concurrency: 2,
+          ttsLimiter: limiter,
+        },
+      ),
+      synthesizePartChunks(
+        { chunks: context.chunks, tts },
+        {
+          partId: secondPart.id,
+          text: "five. six. seven. eight.",
+          voice: "voice-a",
+          rate: "+0%",
+          pitch: "+0Hz",
+          maxCharacters: 7,
+          concurrency: 2,
+          ttsLimiter: limiter,
+        },
+      ),
+    ]);
+
+    expect(maxActiveCount).toBeLessThanOrEqual(3);
+  });
+
   it("does not reuse completed audio across parts", async () => {
     const context = await createTestContext();
     const secondPart = await context.parts.create({
@@ -165,6 +258,46 @@ describe("synthesizePartChunks", () => {
     expect(first.cacheHits).toBe(0);
     expect(second.cacheHits).toBe(0);
     expect(second.chunks[0].audioPath).not.toBe(first.chunks[0].audioPath);
+  });
+
+  it("keeps chunk records ordered by chunk index when completion order differs", async () => {
+    const context = await createTestContext();
+    const tts = createFakeTts(async (input) => {
+      if (input.fileName?.endsWith("-0.mp3")) {
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      return {
+        audioPath: `storage/chunks/${input.fileName}`,
+        byteLength: 4,
+        voice: input.voice,
+        rate: input.rate,
+        pitch: input.pitch,
+      };
+    });
+
+    const result = await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "one. two. three.",
+        voice: "voice-a",
+        rate: "+0%",
+        pitch: "+0Hz",
+        maxCharacters: 6,
+        concurrency: 2,
+      },
+    );
+
+    expect(result.chunks.map((chunk) => chunk.index)).toEqual([0, 1, 2]);
+    await expect(context.chunks.listByPartId(context.part.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ index: 0 }),
+        expect.objectContaining({ index: 1 }),
+        expect.objectContaining({ index: 2 }),
+      ]),
+    );
   });
 
   it("does not reuse audio when voice, rate, or pitch changes", async () => {
@@ -309,3 +442,7 @@ describe("synthesizePartChunks", () => {
     });
   });
 });
+
+async function wait(delayMs: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}

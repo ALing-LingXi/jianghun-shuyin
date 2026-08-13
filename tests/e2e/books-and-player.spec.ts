@@ -59,7 +59,10 @@ test.describe("books and player flows", () => {
       bookId: libraryBookId,
       parts: [
         expect.objectContaining({ title: "Chapter 1" }),
-        expect.objectContaining({ title: "Chapter 2" }),
+        expect.objectContaining({
+          title:
+            "Chapter 2: A very long chapter title that should stay available without stretching the player layout",
+        }),
       ],
     });
 
@@ -77,7 +80,13 @@ test.describe("books and player flows", () => {
     await expect(page.getByTestId("current-part-title")).toHaveText("Chapter 1");
 
     await page.getByTestId("player-next").click();
-    await expect(page.getByTestId("current-part-title")).toHaveText("Chapter 2");
+    await expect(page.getByTestId("current-part-title")).toHaveText(
+      "Chapter 2: A very long chapter title that should stay available without stretching the player layout",
+    );
+    await expect(page.getByTestId("player-part-2")).toHaveAttribute(
+      "title",
+      "Chapter 2: A very long chapter title that should stay available without stretching the player layout",
+    );
     await expect(page.locator("audio")).toHaveCount(1);
 
     await page.setViewportSize({ width: 390, height: 844 });

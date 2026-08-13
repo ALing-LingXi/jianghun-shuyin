@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
@@ -65,6 +65,22 @@ export class LocalStorage implements FileStorage {
     }
 
     await rm(target, { force: true });
+  }
+
+  async exists(filePath: string): Promise<boolean> {
+    const root = path.resolve(this.rootDir);
+    const target = path.resolve(filePath);
+
+    if (target === root || !target.startsWith(`${root}${path.sep}`)) {
+      return false;
+    }
+
+    try {
+      await access(target);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

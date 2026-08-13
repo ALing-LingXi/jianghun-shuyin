@@ -58,6 +58,8 @@ const bookId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
 const partOneId = "33333333-3333-4333-8333-333333333333";
 const partTwoId = "44444444-4444-4444-8444-444444444444";
+const longPartTwoTitle =
+  "Chapter 2: A very long chapter title that should stay available without stretching the player layout";
 const createdAt = Date.parse("2026-08-12T00:00:00.000Z");
 
 const transaction = db.transaction(() => {
@@ -91,7 +93,7 @@ const transaction = db.transaction(() => {
 
   db.prepare(
     "INSERT INTO parts (id, book_id, part_index, title, audio_path, duration_seconds, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(partTwoId, bookId, 1, "Chapter 2", audioTwoPath, 180, "completed");
+  ).run(partTwoId, bookId, 1, longPartTwoTitle, audioTwoPath, 180, "completed");
 });
 
 transaction();

@@ -1,6 +1,18 @@
 import { z } from "zod";
-import { JOB_STAGES, JOB_STATUSES } from "@/shared/types/entities";
+import {
+  JOB_STAGES,
+  JOB_STATUSES,
+  PART_STATUSES,
+} from "@/shared/types/entities";
 import { ttsVoiceIdSchema } from "./tts";
+
+export const jobPartSchema = z.object({
+  id: z.string().uuid(),
+  index: z.number().int().nonnegative(),
+  title: z.string().trim().min(1),
+  status: z.enum(PART_STATUSES),
+  durationSeconds: z.number().int().nonnegative().nullable(),
+});
 
 export const jobSchema = z.object({
   id: z.string().uuid(),
@@ -14,6 +26,7 @@ export const jobSchema = z.object({
   errorMessage: z.string().trim().min(1).nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  parts: z.array(jobPartSchema).default([]),
 });
 
 export const createJobSchema = jobSchema
@@ -21,6 +34,7 @@ export const createJobSchema = jobSchema
     id: true,
     createdAt: true,
     updatedAt: true,
+    parts: true,
   })
   .partial({
     status: true,
@@ -30,4 +44,5 @@ export const createJobSchema = jobSchema
   });
 
 export type JobDto = z.infer<typeof jobSchema>;
+export type JobPartDto = z.infer<typeof jobPartSchema>;
 export type CreateJobDto = z.infer<typeof createJobSchema>;

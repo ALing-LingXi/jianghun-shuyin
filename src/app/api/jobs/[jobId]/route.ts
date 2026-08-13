@@ -19,6 +19,13 @@ function toJobDto(job: {
   errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
+  parts?: Array<{
+    id: string;
+    index: number;
+    title: string;
+    status: string;
+    durationSeconds: number | null;
+  }>;
 }) {
   return jobSchema.parse({
     ...job,

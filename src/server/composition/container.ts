@@ -19,6 +19,8 @@ import { EdgeTtsProvider } from "@/server/infrastructure/edgeTtsProvider";
 import { EdgeTtsVoiceCatalog } from "@/server/infrastructure/edgeTtsVoiceCatalog";
 import { FfmpegAudio } from "@/server/infrastructure/ffmpegAudio";
 import { LocalStorage } from "@/server/infrastructure/localStorage";
+import { createLimiter } from "@/server/tts/concurrency";
+import { DEFAULT_GLOBAL_TTS_CONCURRENCY } from "@/server/tts/chunkSynthesis";
 
 const defaultDatabasePath = path.join(
   process.cwd(),
@@ -26,6 +28,7 @@ const defaultDatabasePath = path.join(
   "jianghun-shuyin.db",
 );
 const defaultStorageRoot = path.join(process.cwd(), "storage");
+const retryTtsLimiter = createLimiter(DEFAULT_GLOBAL_TTS_CONCURRENCY);
 
 export function createContainer() {
   mkdirSync(defaultStorageRoot, { recursive: true });
@@ -49,12 +52,15 @@ export function createContainer() {
       createBookJob({ books, jobs, storage }, input),
     deleteBook: (bookId: string) =>
       deleteBook({ books, chunks, jobs, parts, storage }, bookId),
-    queryJob: (jobId: string) => queryJob({ jobs }, jobId),
+    queryJob: (jobId: string) => queryJob({ jobs, parts }, jobId),
     queryLibrary: () => queryLibrary({ books, jobs, parts }),
     queryPlayer: (bookId: string) =>
       queryPlayer({ books, parts, chunks }, bookId),
     retryChunk: (input: Parameters<typeof retryChunk>[1]) =>
-      retryChunk({ chunks, tts: ttsProvider }, input),
+      retryChunk(
+        { chunks, storage, tts: ttsProvider, ttsLimiter: retryTtsLimiter },
+        input,
+      ),
     retryPart: (input: Parameters<typeof retryPart>[1]) =>
       retryPart({ chunks, jobs, parts, storage }, input),
     audioAssembler,

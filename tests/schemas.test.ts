@@ -39,8 +39,21 @@ describe("shared schemas", () => {
         errorMessage: "1 chapter(s) failed.",
         createdAt,
         updatedAt: createdAt,
+        parts: [
+          {
+            id: "c53a96af-2a92-4fc0-8989-9d1fa1f9f3bd",
+            index: 0,
+            title: "第一章 风起",
+            status: "completed",
+            durationSeconds: 120,
+          },
+        ],
       }),
-    ).toMatchObject({ id: jobId, status: "completed_with_errors" });
+    ).toMatchObject({
+      id: jobId,
+      status: "completed_with_errors",
+      parts: [{ title: "第一章 风起" }],
+    });
   });
 
   it("rejects invalid job progress and missing upload content", () => {

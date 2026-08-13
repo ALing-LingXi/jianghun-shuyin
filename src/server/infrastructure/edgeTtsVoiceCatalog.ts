@@ -1,9 +1,9 @@
 import type { VoiceCatalog } from "@/server/ports/voiceCatalog";
 import {
-  CHINESE_TTS_VOICES,
   DEFAULT_CHINESE_TTS_VOICE,
   DEFAULT_TTS_VOICE,
   isChineseTtsVoiceId,
+  labelForTtsVoiceId,
 } from "@/server/tts/voiceCatalog";
 import type { TtsVoice } from "@/shared/schemas/tts";
 
@@ -34,12 +34,11 @@ export class EdgeTtsVoiceCatalog implements VoiceCatalog {
       const mapped = voices
         .map(toTtsVoice)
         .filter((voice): voice is TtsVoice => voice !== null)
-        .filter((voice) => isChineseTtsVoiceId(voice.id))
         .sort(compareVoices);
 
       return withDefaultVoice(mapped);
     } catch {
-      return [...CHINESE_TTS_VOICES];
+      return [DEFAULT_CHINESE_TTS_VOICE];
     }
   }
 }
@@ -63,7 +62,7 @@ function toTtsVoice(voice: EdgeTtsVoice): TtsVoice | null {
 
   return {
     id: voice.ShortName,
-    label: shortVoiceLabel(voice.ShortName),
+    label: labelForTtsVoiceId(voice.ShortName),
     locale: voice.Locale,
     gender: voice.Gender,
   };
@@ -90,12 +89,6 @@ function dedupeVoices(voices: TtsVoice[]): TtsVoice[] {
   });
 }
 
-function shortVoiceLabel(id: string): string {
-  return id
-    .replace(/^[a-z]{2}-[A-Z]{2}(?:-[a-z]+)?-/, "")
-    .replace(/(?::.*|Multilingual|Dialects|Neural)/g, "");
-}
-
 function compareVoices(left: TtsVoice, right: TtsVoice): number {
   if (left.id === right.id) {
     return 0;
@@ -109,9 +102,27 @@ function compareVoices(left: TtsVoice, right: TtsVoice): number {
     return 1;
   }
 
+  const leftRank = voiceLocaleRank(left);
+  const rightRank = voiceLocaleRank(right);
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
   if (left.locale !== right.locale) {
     return left.locale.localeCompare(right.locale);
   }
 
   return left.label.localeCompare(right.label);
+}
+
+function voiceLocaleRank(voice: TtsVoice): number {
+  if (voice.locale === "zh-CN") {
+    return 0;
+  }
+
+  if (isChineseTtsVoiceId(voice.id)) {
+    return 1;
+  }
+
+  return 2;
 }

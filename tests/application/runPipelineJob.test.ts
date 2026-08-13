@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, unlink, mkdtemp } from "node:fs/promises";
+import { access, readdir, readFile, rm, unlink, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -46,7 +46,7 @@ async function createTestContext() {
   const parts = new DrizzlePartRepository(client.db);
   const chunks = new DrizzleChunkRepository(client.db);
   const storage = new LocalStorage(storageRoot);
-  const tts = createFakeTts();
+  const tts = createFakeTts(storage);
   const audio = createFakeAudio();
 
   return { client, storageRoot, books, jobs, parts, chunks, storage, tts, audio };
@@ -111,6 +111,7 @@ describe("runPipelineJob", () => {
     expect(chunkRows).toHaveLength(2);
     expect(chunkRows.every((chunk) => chunk.status === "completed")).toBe(true);
     expect(chunkRows.every((chunk) => chunk.errorMessage === null)).toBe(true);
+    expect(chunkRows.every((chunk) => chunk.audioPath === null)).toBe(true);
 
     const cleanedFiles = await readdir(path.join(context.storageRoot, "cleaned"));
     expect(cleanedFiles).toHaveLength(1);
@@ -169,6 +170,118 @@ describe("runPipelineJob", () => {
     });
     const partRows = context.client.db.select().from(partsTable).all();
     expect(partRows.every((part) => part.status === "failed")).toBe(true);
+  });
+
+  it("deletes chunk audio only after a part is assembled successfully", async () => {
+    const context = await createTestContext();
+    const result = await createBookJob(
+      {
+        books: context.books,
+        jobs: context.jobs,
+        storage: context.storage,
+      },
+      {
+        title: "Cleanup test",
+        text: "Chapter 1: Wind\nRain fell on the street.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    await runUntilTerminal(context, result.jobId);
+
+    const chunkRows = context.client.db.select().from(chunksTable).all();
+    expect(chunkRows).toHaveLength(1);
+    expect(chunkRows[0]).toMatchObject({
+      status: "completed",
+      audioPath: null,
+    });
+    await expect(readdir(path.join(context.storageRoot, "chunks"))).resolves.toEqual(
+      [],
+    );
+  });
+
+  it("cleans stale chunk audio for already completed parts while continuing the job", async () => {
+    const context = await createTestContext();
+    const result = await createQueuedJob(context);
+    await runPipelineJob(context, result.jobId);
+    await runPipelineJob(context, result.jobId);
+    await runPipelineJob(context, result.jobId);
+    await runPipelineJob(context, result.jobId);
+    await runPipelineJob(context, result.jobId);
+
+    const parts = context.client.db.select().from(partsTable).all();
+    const firstPart = parts[0];
+    if (!firstPart) {
+      throw new Error("Expected at least one part to mark completed");
+    }
+
+    const completedPart = await context.parts.updateById(firstPart.id, {
+      status: "completed",
+      audioPath: path.join(context.storageRoot, "parts", "completed.mp3"),
+      durationSeconds: 12,
+    });
+    if (!completedPart) {
+      throw new Error("Expected completed part update to succeed");
+    }
+
+    const staleChunkPath = await context.storage.saveChunkAudio({
+      content: new Uint8Array([1, 2, 3]),
+      fileName: "stale.mp3",
+    });
+    await context.chunks.create({
+      partId: completedPart.id,
+      index: 0,
+      textHash: "stale-hash",
+      audioPath: staleChunkPath,
+      status: "completed",
+    });
+
+    await runPipelineJob(context, result.jobId);
+
+    await expect(access(staleChunkPath)).rejects.toThrow();
+    const chunks = await context.chunks.listByPartId(completedPart.id);
+    expect(chunks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          textHash: "stale-hash",
+          audioPath: null,
+          status: "completed",
+        }),
+      ]),
+    );
+    expect(chunks.every((chunk) => chunk.audioPath === null)).toBe(true);
+  });
+
+  it("keeps chunk audio when part assembly fails", async () => {
+    const context = await createTestContext();
+    context.audio = createFakeAudio({
+      assemblePart: async () => {
+        throw new Error("ffmpeg concat failed");
+      },
+    });
+    const result = await createBookJob(
+      {
+        books: context.books,
+        jobs: context.jobs,
+        storage: context.storage,
+      },
+      {
+        title: "Failed cleanup test",
+        text: "Chapter 1: Wind\nRain fell on the street.",
+        voice: "zh-CN-XiaoxiaoNeural",
+        rate: "+0%",
+        pitch: "+0Hz",
+      },
+    );
+
+    await runUntilTerminal(context, result.jobId);
+
+    const chunkRows = context.client.db.select().from(chunksTable).all();
+    expect(chunkRows).toHaveLength(1);
+    expect(chunkRows[0].audioPath).toBeTruthy();
+    await expect(access(chunkRows[0].audioPath!)).resolves.toBeUndefined();
   });
 
   it("keeps a failed TTS chapter unavailable and continues later chapters", async () => {
@@ -256,9 +369,24 @@ async function runUntilTerminal(
   throw new Error("Job did not reach a terminal state");
 }
 
-function createFakeTts(): TTSProvider {
+function createFakeTts(storage?: LocalStorage): TTSProvider {
   return {
     async synthesize(input) {
+      if (storage) {
+        const audioPath = await storage.saveChunkAudio({
+          content: new Uint8Array([0x49, 0x44, 0x33, 0x04]),
+          fileName: input.fileName ?? "chunk.mp3",
+        });
+
+        return {
+          audioPath,
+          byteLength: 4,
+          voice: input.voice,
+          rate: input.rate,
+          pitch: input.pitch,
+        };
+      }
+
       return {
         audioPath: `storage/chunks/${input.fileName}`,
         byteLength: 4,

@@ -107,7 +107,61 @@ describe("GET /api/player/books/[bookId]", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("audio/mpeg");
+    expect(response.headers.get("Accept-Ranges")).toBe("bytes");
+    expect(response.headers.get("Content-Length")).toBe("3");
     await expect(response.arrayBuffer()).resolves.toHaveProperty("byteLength", 3);
+  });
+
+  it("returns byte ranges for audio playback", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "jianghun-player-"));
+    tempRoots.push(root);
+    const audioPath = path.join(root, "part.mp3");
+    await writeFile(audioPath, new Uint8Array([1, 2, 3, 4, 5]));
+    findPartById.mockResolvedValueOnce(createPart({ audioPath }));
+
+    const response = await GET(
+      new Request(`http://localhost/api/player/books/${bookId}?partId=${partId}`, {
+        headers: {
+          Range: "bytes=1-3",
+        },
+      }),
+      {
+        params: Promise.resolve({ bookId }),
+      },
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("Content-Type")).toBe("audio/mpeg");
+    expect(response.headers.get("Accept-Ranges")).toBe("bytes");
+    expect(response.headers.get("Content-Range")).toBe("bytes 1-3/5");
+    expect(response.headers.get("Content-Length")).toBe("3");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    expect([...bytes]).toEqual([2, 3, 4]);
+  });
+
+  it("returns suffix byte ranges for audio playback", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "jianghun-player-"));
+    tempRoots.push(root);
+    const audioPath = path.join(root, "part.mp3");
+    await writeFile(audioPath, new Uint8Array([1, 2, 3, 4, 5]));
+    findPartById.mockResolvedValueOnce(createPart({ audioPath }));
+
+    const response = await GET(
+      new Request(`http://localhost/api/player/books/${bookId}?partId=${partId}`, {
+        headers: {
+          Range: "bytes=-2",
+        },
+      }),
+      {
+        params: Promise.resolve({ bookId }),
+      },
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("Content-Range")).toBe("bytes 3-4/5");
+    expect(response.headers.get("Content-Length")).toBe("2");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    expect([...bytes]).toEqual([4, 5]);
   });
 
   it("does not return audio for failed parts", async () => {

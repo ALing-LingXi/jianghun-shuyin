@@ -28,7 +28,7 @@ type UploadFormState =
 
 const defaultVoice: TtsVoice = {
   id: DEFAULT_TTS_VOICE,
-  label: "云希",
+  label: "云溪",
   locale: "zh-CN",
   gender: "Male",
 };
