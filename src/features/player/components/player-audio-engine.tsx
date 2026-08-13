@@ -21,7 +21,7 @@ export function PlayerAudioEngine() {
   const setPlaying = usePlayerStore((state) => state.setPlaying);
   const setPlaybackTime = usePlayerStore((state) => state.setPlaybackTime);
   const clearSeekTarget = usePlayerStore((state) => state.clearSeekTarget);
-  const goToNext = usePlayerStore((state) => state.goToNext);
+  const handlePartEnded = usePlayerStore((state) => state.handlePartEnded);
 
   const currentPart = useMemo(() => {
     const part = parts.find((candidate) => candidate.id === partId) ?? null;
@@ -115,7 +115,7 @@ export function PlayerAudioEngine() {
             : null,
         })
       }
-      onEnded={goToNext}
+      onEnded={handlePartEnded}
     />
   );
 }

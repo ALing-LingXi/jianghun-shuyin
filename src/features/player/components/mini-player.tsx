@@ -1,6 +1,6 @@
 "use client";
 
-import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Pause, Play, Repeat, SkipBack, SkipForward } from "lucide-react";
 import { useMemo } from "react";
 import type { PlayerPartDto } from "@/shared/schemas/player";
 import { usePlayerStore } from "../player-store";
@@ -9,7 +9,13 @@ export function MiniPlayer() {
   const parts = usePlayerStore((state) => state.parts);
   const partId = usePlayerStore((state) => state.partId);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const continuousPlayback = usePlayerStore(
+    (state) => state.continuousPlayback,
+  );
   const setPlaying = usePlayerStore((state) => state.setPlaying);
+  const setContinuousPlayback = usePlayerStore(
+    (state) => state.setContinuousPlayback,
+  );
   const goToPrevious = usePlayerStore((state) => state.goToPrevious);
   const goToNext = usePlayerStore((state) => state.goToNext);
   const playableParts = useMemo(() => parts.filter(isPlayablePart), [parts]);
@@ -47,6 +53,20 @@ export function MiniPlayer() {
             Chapter {currentPart.index + 1}
           </p>
         </div>
+        <button
+          type="button"
+          data-testid="mini-player-continuous-playback"
+          className={`grid size-10 place-items-center border transition ${
+            continuousPlayback
+              ? "border-emerald-300/35 bg-emerald-400/15 text-emerald-100"
+              : "border-fuchsia-200/15 bg-white/[0.04] text-fuchsia-50 hover:bg-white/[0.08]"
+          }`}
+          onClick={() => setContinuousPlayback(!continuousPlayback)}
+          aria-label={continuousPlayback ? "Continuous play on" : "Single chapter"}
+          aria-pressed={continuousPlayback}
+        >
+          <Repeat className="h-4 w-4" aria-hidden="true" />
+        </button>
         <button
           type="button"
           data-testid="mini-player-previous"

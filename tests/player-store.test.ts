@@ -12,6 +12,7 @@ afterEach(() => {
     seekTargetSeconds: null,
     stopAfterCurrent: false,
     sleepTimerEndsAt: null,
+    continuousPlayback: true,
   });
 });
 
@@ -78,6 +79,45 @@ describe("player store", () => {
       currentTimeSeconds: 0,
       durationSeconds: null,
       seekTargetSeconds: null,
+    });
+  });
+
+  it("stops after the current part when continuous playback is disabled", () => {
+    usePlayerStore.getState().setParts([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        index: 0,
+        title: "Chapter 1",
+        status: "completed",
+        audioUrl: "/audio/1.mp3",
+        durationSeconds: 120,
+        errorMessage: null,
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        index: 1,
+        title: "Chapter 2",
+        status: "completed",
+        audioUrl: "/audio/2.mp3",
+        durationSeconds: 180,
+        errorMessage: null,
+      },
+    ]);
+    usePlayerStore.getState().setPlaying(true);
+    usePlayerStore.getState().setContinuousPlayback(false);
+
+    usePlayerStore.getState().handlePartEnded();
+
+    expect(usePlayerStore.getState()).toMatchObject({
+      partId: "11111111-1111-4111-8111-111111111111",
+      isPlaying: false,
+      continuousPlayback: false,
+    });
+
+    usePlayerStore.getState().goToNext();
+
+    expect(usePlayerStore.getState()).toMatchObject({
+      partId: "22222222-2222-4222-8222-222222222222",
     });
   });
 });

@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   Headphones,
@@ -11,26 +13,42 @@ import {
 } from "lucide-react";
 import BlurText from "@/components/BlurText";
 import ShinyText from "@/components/ShinyText";
-import SplashCursor from "@/components/SplashCursor";
 import StarBorder from "@/components/StarBorder";
 import { HealthStatus } from "@/features/health/health-status";
 
+const DesktopSplashCursor = dynamic(() => import("@/components/SplashCursor"), {
+  ssr: false,
+});
+
 export default function HomePage() {
+  const [showDesktopCursor, setShowDesktopCursor] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(
+      "(min-width: 1024px) and (prefers-reduced-motion: no-preference)",
+    );
+    const update = () => setShowDesktopCursor(media.matches);
+
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
   return (
     <main className="demon-home">
-      <div className="hidden lg:block">
-        <SplashCursor
-          DYE_RESOLUTION={512}
-          SIM_RESOLUTION={64}
+      {showDesktopCursor && (
+        <DesktopSplashCursor
+          DYE_RESOLUTION={384}
+          SIM_RESOLUTION={48}
           DENSITY_DISSIPATION={4}
           VELOCITY_DISSIPATION={2.4}
-          SPLAT_RADIUS={0.12}
-          SPLAT_FORCE={2500}
+          SPLAT_RADIUS={0.1}
+          SPLAT_FORCE={2200}
           CURL={2}
           RAINBOW_MODE={false}
           COLOR="#ff2aa3"
         />
-      </div>
+      )}
 
       <section className="demon-home-hero">
         <div className="demon-home-copy">
@@ -63,14 +81,14 @@ export default function HomePage() {
               label="听书书架"
               description="管理有声书任务、章节音频和播放队列。"
               icon={Headphones}
-              image="/assets/images/恶魔勇士/Fm5chK.gif"
+              image="/assets/images/恶魔勇士/tMPQqN.gif"
             />
             <HomeGate
               href="/reading"
               label="阅读书架"
               description="上传 TXT 与封面，按章节滚动阅读。"
               icon={BookOpen}
-              image="/assets/images/恶魔女王/JLZeTV.gif"
+              image="/assets/images/恶魔女王/1P7MSU.gif"
             />
           </div>
 
@@ -106,11 +124,9 @@ export default function HomePage() {
             width={416}
             height={416}
             unoptimized
+            loading="eager"
           />
-          <div className="demon-home-health">
-            <span>本地服务</span>
-            <HealthStatus />
-          </div>
+          <StatusDock />
         </aside>
       </section>
 
@@ -121,6 +137,7 @@ export default function HomePage() {
           fill
           sizes="100vw"
           unoptimized
+          loading="lazy"
         />
       </section>
     </main>
@@ -149,10 +166,47 @@ function HomeGate({
         <strong>{label}</strong>
         <small>{description}</small>
       </span>
-      <Image src={image} alt="" width={72} height={72} unoptimized />
+      <Image
+        src={image}
+        alt=""
+        width={72}
+        height={72}
+        unoptimized
+        loading="lazy"
+      />
       <span className="demon-home-gate-warp" aria-hidden="true">
         ENTER
       </span>
     </Link>
+  );
+}
+
+function StatusDock() {
+  return (
+    <div className="demon-home-status-dock">
+      <Image
+        className="demon-home-status-mascot"
+        src="/assets/images/小恶魔/status.gif"
+        alt=""
+        width={228}
+        height={130}
+        unoptimized
+        loading="lazy"
+      />
+      <div className="demon-home-health">
+        <div className="demon-home-health-heading">
+          <span>本地服务</span>
+          <Image
+            src="/assets/images/小恶魔/hi.gif"
+            alt=""
+            width={44}
+            height={44}
+            unoptimized
+            loading="lazy"
+          />
+        </div>
+        <HealthStatus />
+      </div>
+    </div>
   );
 }

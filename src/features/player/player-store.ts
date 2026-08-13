@@ -11,6 +11,7 @@ type PlayerState = {
   currentTimeSeconds: number;
   durationSeconds: number | null;
   seekTargetSeconds: number | null;
+  continuousPlayback: boolean;
   stopAfterCurrent: boolean;
   sleepTimerEndsAt: number | null;
   setBookId: (bookId: string | null) => void;
@@ -23,11 +24,13 @@ type PlayerState = {
   }) => void;
   requestSeek: (seconds: number) => void;
   clearSeekTarget: () => void;
+  setContinuousPlayback: (continuousPlayback: boolean) => void;
   setStopAfterCurrent: (stopAfterCurrent: boolean) => void;
   setSleepTimerMinutes: (minutes: number) => void;
   clearSleepTimer: () => void;
   goToPrevious: () => void;
   goToNext: () => void;
+  handlePartEnded: () => void;
 };
 
 export const usePlayerStore = create<PlayerState>((set) => ({
@@ -38,6 +41,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   currentTimeSeconds: 0,
   durationSeconds: null,
   seekTargetSeconds: null,
+  continuousPlayback: true,
   stopAfterCurrent: false,
   sleepTimerEndsAt: null,
   setBookId: (bookId) => set({ bookId }),
@@ -76,6 +80,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     }),
   requestSeek: (seconds) => set({ seekTargetSeconds: Math.max(0, seconds) }),
   clearSeekTarget: () => set({ seekTargetSeconds: null }),
+  setContinuousPlayback: (continuousPlayback) => set({ continuousPlayback }),
   setStopAfterCurrent: (stopAfterCurrent) => set({ stopAfterCurrent }),
   setSleepTimerMinutes: (minutes) =>
     set({ sleepTimerEndsAt: Date.now() + minutes * 60_000 }),
@@ -99,7 +104,24 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     }),
   goToNext: () =>
     set((state) => {
-      if (state.stopAfterCurrent) {
+      const playableParts = state.parts.filter(isPlayablePart);
+      const currentIndex = playableParts.findIndex(
+        (part) => part.id === state.partId,
+      );
+      const nextPart = playableParts[currentIndex + 1];
+
+      return nextPart
+        ? {
+            partId: nextPart.id,
+            currentTimeSeconds: 0,
+            durationSeconds: null,
+            seekTargetSeconds: null,
+          }
+        : { isPlaying: false };
+    }),
+  handlePartEnded: () =>
+    set((state) => {
+      if (state.stopAfterCurrent || !state.continuousPlayback) {
         return { isPlaying: false, stopAfterCurrent: false };
       }
 

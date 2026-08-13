@@ -384,11 +384,13 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .demon-page-header {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1.5rem;
+  overflow: hidden;
   margin-bottom: 1.25rem;
   padding: 1.1rem 1.25rem;
   border: 2px solid rgba(255, 103, 194, 0.45);
@@ -398,6 +400,21 @@ input[type="range"]::-moz-range-thumb {
   box-shadow:
     6px 6px 0 rgba(55, 0, 38, 0.82),
     inset 0 0 28px rgba(255, 35, 158, 0.08);
+}
+
+.demon-page-header::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0 52%, rgba(255, 240, 166, 0.08) 52% 56%, transparent 56%),
+    radial-gradient(circle at 92% 16%, rgba(255, 127, 205, 0.18), transparent 14rem);
+  content: "";
+}
+
+.demon-page-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .demon-page-header h1 {
@@ -460,6 +477,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .demon-panel {
+  position: relative;
   border: 2px solid rgba(255, 103, 194, 0.34);
   background:
     linear-gradient(180deg, rgba(38, 0, 28, 0.9), rgba(12, 0, 9, 0.94)),
@@ -467,6 +485,19 @@ input[type="range"]::-moz-range-thumb {
   box-shadow:
     6px 6px 0 rgba(53, 0, 37, 0.78),
     inset 0 0 0 1px rgba(255, 194, 229, 0.04);
+}
+
+.demon-panel::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  content: "";
+}
+
+.demon-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .demon-panel-soft {
@@ -570,6 +601,41 @@ input[type="range"]::-moz-range-thumb {
   min-height: 100vh;
   overflow: hidden;
   padding: 1rem;
+  background:
+    radial-gradient(circle at 80% 22%, rgba(255, 111, 196, 0.18), transparent 28rem),
+    radial-gradient(circle at 20% 72%, rgba(255, 218, 102, 0.08), transparent 24rem),
+    #5d0933;
+  isolation: isolate;
+}
+
+.demon-home::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 126, 206, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 126, 206, 0.055) 1px, transparent 1px);
+  background-size: 3.25rem 3.25rem;
+  content: "";
+  mask-image: linear-gradient(180deg, black, transparent 82%);
+}
+
+.demon-home::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 2px,
+      transparent 5px
+    );
+  content: "";
+  opacity: 0.35;
 }
 
 .demon-home-hero {
@@ -602,6 +668,7 @@ input[type="range"]::-moz-range-thumb {
   box-shadow:
     8px 8px 0 rgba(64, 0, 43, 0.86),
     inset 0 0 42px rgba(255, 35, 158, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .demon-home-kicker {
@@ -665,10 +732,28 @@ input[type="range"]::-moz-range-thumb {
     background 160ms ease;
 }
 
+.demon-home-gate::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent, rgba(255, 240, 166, 0.12), transparent);
+  content: "";
+  opacity: 0;
+  transform: translateX(-40%);
+  transition:
+    opacity 160ms ease,
+    transform 260ms ease;
+}
+
 .demon-home-gate:hover {
   border-color: #ff8fd5;
   background: linear-gradient(90deg, rgba(155, 10, 98, 0.78), rgba(28, 0, 21, 0.82));
   transform: translateX(4px);
+}
+
+.demon-home-gate:hover::before {
+  opacity: 1;
+  transform: translateX(40%);
 }
 
 .demon-home-gate-icon {
@@ -708,6 +793,7 @@ input[type="range"]::-moz-range-thumb {
   justify-self: end;
   image-rendering: pixelated;
   object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.42));
 }
 
 .demon-home-gate-warp {
@@ -769,6 +855,7 @@ input[type="range"]::-moz-range-thumb {
   min-height: 24rem;
   align-items: end;
   justify-items: center;
+  align-content: center;
 }
 
 .demon-moon-seal {
@@ -809,14 +896,36 @@ input[type="range"]::-moz-range-thumb {
   height: auto;
   image-rendering: pixelated;
   object-fit: contain;
-  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.5));
+  filter:
+    drop-shadow(0 18px 22px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 28px rgba(255, 90, 194, 0.26));
+}
+
+.demon-home-status-dock {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  width: min(100%, 19rem);
+  justify-items: end;
+}
+
+.demon-home-status-mascot {
+  position: relative;
+  z-index: 2;
+  width: min(78%, 14.25rem);
+  height: auto;
+  margin-right: 0.75rem;
+  margin-bottom: -1.25rem;
+  image-rendering: pixelated;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.42));
 }
 
 .demon-home-health {
-  position: absolute;
-  right: 0;
-  bottom: 1rem;
-  z-index: 3;
+  position: relative;
+  z-index: 1;
   width: 15rem;
   border: 2px solid rgba(255, 117, 201, 0.42);
   background: rgba(17, 0, 13, 0.88);
@@ -824,13 +933,26 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 5px 5px 0 #4b0031;
 }
 
-.demon-home-health > span {
-  display: block;
+.demon-home-health-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.45rem;
+  gap: 0.75rem;
+}
+
+.demon-home-health-heading > span {
   color: #ff91d3;
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.16em;
+}
+
+.demon-home-health-heading img {
+  width: 2.25rem;
+  height: 2.25rem;
+  image-rendering: pixelated;
+  object-fit: contain;
 }
 
 .demon-home-bottom {
@@ -868,6 +990,10 @@ input[type="range"]::-moz-range-thumb {
   .demon-home-stage {
     min-height: 38rem;
   }
+
+  .demon-home-character {
+    transform: translateY(1rem) scale(1.08);
+  }
 }
 
 .pretty-scrollbar {
@@ -895,6 +1021,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .reading-content {
+  border-left: 2px solid rgba(253, 230, 138, 0.24);
+  padding-left: clamp(1rem, 3vw, 2rem);
   text-wrap: pretty;
 }
 
@@ -975,7 +1103,7 @@ input[type="range"]::-moz-range-thumb {
 
   .demon-home-hero {
     min-height: calc(100vh - 4.8rem);
-    padding-block: 0.65rem 7rem;
+    padding-block: 0.65rem 8rem;
   }
 
   .demon-home-copy {
@@ -1002,6 +1130,42 @@ input[type="range"]::-moz-range-thumb {
     font-size: 0.66rem;
   }
 
+  .demon-home-stage {
+    min-height: 27rem;
+    padding-bottom: 8rem;
+  }
+
+  .demon-moon-seal {
+    top: 0;
+    width: 16rem;
+    height: 16rem;
+  }
+
+  .demon-moon-seal span {
+    font-size: 2.35rem;
+  }
+
+  .demon-moon-seal small {
+    max-width: 9rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.28em;
+    text-align: center;
+  }
+
+  .demon-home-character {
+    width: min(100%, 20rem);
+  }
+
+  .demon-home-status-dock {
+    right: 50%;
+    bottom: 0.25rem;
+    width: min(100%, 18rem);
+    transform: translateX(50%);
+  }
+
+  .demon-home-health {
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

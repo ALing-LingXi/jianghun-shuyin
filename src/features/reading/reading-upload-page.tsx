@@ -115,6 +115,7 @@ function ReadingUploadForm() {
                 width={640}
                 height={192}
                 unoptimized
+                loading="lazy"
               />
             </div>
           </section>

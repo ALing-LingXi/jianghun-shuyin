@@ -82,6 +82,7 @@ export function DemonAppFrame({ children }: { children: React.ReactNode }) {
             width={96}
             height={66}
             unoptimized
+            loading="lazy"
           />
           <span>
             <ScrollText />

@@ -152,6 +152,7 @@ function ReadingBookCard({ book }: { book: ReadingBookSummaryDto }) {
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"
             unoptimized
+            loading="lazy"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
           <span className="absolute right-3 bottom-3 border border-amber-100/30 bg-black/70 px-2.5 py-1 text-xs font-bold text-amber-100 backdrop-blur">

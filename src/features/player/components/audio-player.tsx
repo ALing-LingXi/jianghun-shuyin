@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import Image from "next/image";
 import {
   CircleAlert,
   Clock,
@@ -8,6 +9,7 @@ import {
   LoaderCircle,
   Pause,
   Play,
+  Repeat,
   RotateCcw,
   SkipBack,
   SkipForward,
@@ -32,12 +34,18 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
     (state) => state.currentTimeSeconds,
   );
   const durationSeconds = usePlayerStore((state) => state.durationSeconds);
+  const continuousPlayback = usePlayerStore(
+    (state) => state.continuousPlayback,
+  );
   const stopAfterCurrent = usePlayerStore((state) => state.stopAfterCurrent);
   const sleepTimerEndsAt = usePlayerStore((state) => state.sleepTimerEndsAt);
   const setPartId = usePlayerStore((state) => state.setPartId);
   const setParts = usePlayerStore((state) => state.setParts);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
   const requestSeek = usePlayerStore((state) => state.requestSeek);
+  const setContinuousPlayback = usePlayerStore(
+    (state) => state.setContinuousPlayback,
+  );
   const setStopAfterCurrent = usePlayerStore(
     (state) => state.setStopAfterCurrent,
   );
@@ -130,7 +138,16 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
         <section className="grid min-w-0 gap-5 border-b border-fuchsia-200/10 bg-black/15 p-5 lg:border-r lg:border-b-0 sm:p-7">
           <div className="grid gap-5 md:grid-cols-[12rem_1fr] md:items-center">
             <div className="relative mx-auto aspect-[4/5] w-full max-w-48 overflow-hidden border-2 border-fuchsia-200/30 bg-[#240018] shadow-[8px_8px_0_#59043b] md:mx-0">
-              <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(242,42,162,0.7),transparent_52%),linear-gradient(180deg,#4e0635,#10000b)]" />
+              <Image
+                className="object-cover opacity-80 mix-blend-screen"
+                src="/assets/images/恶魔勇士/GwGFIM.gif"
+                alt=""
+                fill
+                sizes="192px"
+                unoptimized
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(242,42,162,0.75),transparent_52%),linear-gradient(180deg,rgba(78,6,53,0.7),#10000b)]" />
               <div className="absolute inset-y-5 left-5 w-px bg-white/20" />
               <div className="absolute right-5 bottom-6 left-8 h-20 rounded-lg bg-white/10" />
               <Headphones
@@ -149,7 +166,7 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
 
             <div className="min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="demon-eyebrow">Current chapter</p>
+                <p className="demon-eyebrow">Current chapter</p>
                 {player.latestJob ? (
                   <JobGenerationControls
                     job={player.latestJob}
@@ -170,7 +187,7 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
                 {failedCount > 0 ? ` - ${failedCount} failed` : ""}
               </p>
 
-            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              <div className="mt-5 grid gap-2 sm:grid-cols-3">
                 <PlayerMetric label="Completed" value={`${completedPercent}%`} />
                 <PlayerMetric label="Queue" value={`${player.parts.length}`} />
                 <PlayerMetric
@@ -238,6 +255,20 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
+            data-testid="player-continuous-playback"
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+              continuousPlayback
+                ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                : "border-fuchsia-200/15 bg-white/[0.04] text-fuchsia-50 hover:bg-white/[0.08]"
+            }`}
+            onClick={() => setContinuousPlayback(!continuousPlayback)}
+            aria-pressed={continuousPlayback}
+          >
+            <Repeat className="h-4 w-4" aria-hidden="true" />
+            {continuousPlayback ? "Continuous play" : "Single chapter"}
+          </button>
+          <button
+            type="button"
             data-testid="player-previous"
             className="demon-button-secondary"
             onClick={goToPrevious}
@@ -290,7 +321,7 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2">
-            <span className="text-sm font-bold text-fuchsia-100">
+          <span className="text-sm font-bold text-fuchsia-100">
             Sleep timer
           </span>
           {[10, 15, 30, 45, 60].map((minutes) => (
@@ -312,7 +343,7 @@ export function AudioPlayer({ player }: { player: PlayerDto }) {
             Clear
           </button>
           {sleepTimerEndsAt ? (
-              <span className="basis-full text-center text-xs text-fuchsia-100/50">
+            <span className="basis-full text-center text-xs text-fuchsia-100/50">
               Stops at {new Date(sleepTimerEndsAt).toLocaleTimeString()}
             </span>
           ) : null}
