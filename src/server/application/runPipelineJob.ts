@@ -33,6 +33,7 @@ export type RunPipelineJobDeps = {
   audio: AudioAssembler;
   ttsLimiter?: Limiter;
   ttsChunkConcurrency?: number;
+  ttsAttemptTimeoutMs?: number;
   ttsRetryDelaysMs?: readonly number[];
   assembleLimiter?: Limiter;
 };
@@ -322,25 +323,37 @@ async function processNextPartStage(
     durationSeconds: null,
   });
 
-  const result = await synthesizePartChunks(
-    {
-      chunks: deps.chunks,
-      tts: deps.tts,
-    },
-    {
-      partId: nextPart.id,
-      text: plannedPart.text,
-      voice: job.voice || DEFAULT_TTS_VOICE,
-      rate: job.rate || DEFAULT_TTS_RATE,
-      pitch: job.pitch || DEFAULT_TTS_PITCH,
-      concurrency: deps.ttsChunkConcurrency,
-      ttsLimiter: deps.ttsLimiter,
-      retryDelaysMs: deps.ttsRetryDelaysMs,
-      shouldContinue: async () => !(await shouldStopJob(deps, job.id)),
-      discardAudio: (audioPath) => safeDeleteFile(deps, audioPath),
-      stopOnFailure: true,
-    },
-  );
+  let result: Awaited<ReturnType<typeof synthesizePartChunks>>;
+  try {
+    result = await synthesizePartChunks(
+      {
+        chunks: deps.chunks,
+        tts: deps.tts,
+      },
+      {
+        partId: nextPart.id,
+        text: plannedPart.text,
+        voice: job.voice || DEFAULT_TTS_VOICE,
+        rate: job.rate || DEFAULT_TTS_RATE,
+        pitch: job.pitch || DEFAULT_TTS_PITCH,
+        concurrency: deps.ttsChunkConcurrency,
+        attemptTimeoutMs: deps.ttsAttemptTimeoutMs,
+        ttsLimiter: deps.ttsLimiter,
+        retryDelaysMs: deps.ttsRetryDelaysMs,
+        shouldContinue: async () => !(await shouldStopJob(deps, job.id)),
+        discardAudio: (audioPath) => safeDeleteFile(deps, audioPath),
+        stopOnFailure: true,
+      },
+    );
+  } catch (error) {
+    if (await shouldStopJob(deps, job.id)) {
+      return;
+    }
+
+    await markPartFailed(deps, nextPart, toErrorMessage(error));
+    await updateJobChapterProgress(deps, job);
+    return;
+  }
 
   if (await shouldStopJob(deps, job.id)) {
     return;

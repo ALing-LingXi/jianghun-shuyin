@@ -32,23 +32,25 @@ export function MiniPlayer() {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-300 bg-white/95 px-4 py-3 shadow-lg sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#151312]/95 px-4 py-3 shadow-2xl shadow-black/35 backdrop-blur sm:hidden"
       data-testid="mini-player"
     >
       <div className="mx-auto flex max-w-xl items-center gap-3">
         <div className="min-w-0 flex-1">
           <p
-            className="truncate text-sm font-medium text-stone-900"
+            className="truncate text-sm font-medium text-stone-50"
             data-testid="mini-current-part-title"
           >
             {currentPart.title}
           </p>
-          <p className="text-xs text-stone-500">Chapter {currentPart.index + 1}</p>
+          <p className="text-xs text-stone-400">
+            Chapter {currentPart.index + 1}
+          </p>
         </div>
         <button
           type="button"
           data-testid="mini-player-previous"
-          className="grid h-10 w-10 place-items-center border border-stone-300 text-stone-800 disabled:cursor-not-allowed disabled:text-stone-400"
+          className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-stone-100 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:text-stone-500"
           onClick={goToPrevious}
           disabled={!canGoPrevious}
           aria-label="Previous part"
@@ -58,7 +60,7 @@ export function MiniPlayer() {
         <button
           type="button"
           data-testid="mini-player-toggle"
-          className="grid h-11 w-11 place-items-center border border-stone-900 bg-stone-900 text-white"
+          className="grid h-11 w-11 place-items-center rounded-lg border border-red-300/30 bg-red-500 text-white shadow-lg shadow-red-950/30 transition hover:bg-red-400"
           onClick={togglePlay}
           aria-label={isPlaying ? "Pause" : "Play"}
         >
@@ -71,7 +73,7 @@ export function MiniPlayer() {
         <button
           type="button"
           data-testid="mini-player-next"
-          className="grid h-10 w-10 place-items-center border border-stone-300 text-stone-800 disabled:cursor-not-allowed disabled:text-stone-400"
+          className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-stone-100 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:text-stone-500"
           onClick={goToNext}
           disabled={!canGoNext}
           aria-label="Next part"

@@ -415,6 +415,33 @@ describe("synthesizePartChunks", () => {
     });
   });
 
+  it("passes an attempt timeout to the TTS provider", async () => {
+    const context = await createTestContext();
+    const tts = createFakeTts(async (input) => ({
+      audioPath: `storage/chunks/${input.fileName}`,
+      byteLength: 4,
+      voice: input.voice,
+      rate: input.rate,
+      pitch: input.pitch,
+    }));
+
+    await synthesizePartChunks(
+      { chunks: context.chunks, tts },
+      {
+        partId: context.part.id,
+        text: "timeout configuration.",
+        voice: "voice-a",
+        rate: "+0%",
+        pitch: "+0Hz",
+        attemptTimeoutMs: 1234,
+      },
+    );
+
+    expect(tts.synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 1234 }),
+    );
+  });
+
   it("stops retrying retryable TTS errors after the configured attempts", async () => {
     const context = await createTestContext();
     const tts = createFakeTts(async () => {

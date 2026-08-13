@@ -4,6 +4,7 @@ export type SynthesizeSpeechInput = {
   rate: string;
   pitch: string;
   fileName?: string;
+  timeoutMs?: number;
 };
 
 export type SynthesizeSpeechResult = {

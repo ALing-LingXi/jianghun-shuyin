@@ -25,10 +25,10 @@ export function JobGenerationControls({
   }
 
   return (
-    <div className="grid gap-2 border border-stone-200 bg-white p-3">
+    <div className="inline-grid w-fit gap-2">
       <button
         type="button"
-        className="w-fit border border-stone-900 bg-stone-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:border-stone-300 disabled:bg-stone-300"
+        className="w-fit rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-stone-100 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:text-stone-500"
         disabled={controls.isPending}
         onClick={() => controls.mutate(action)}
       >
@@ -39,7 +39,7 @@ export function JobGenerationControls({
             : "Pause generation"}
       </button>
       {controls.isError ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="max-w-64 text-xs text-red-200" role="alert">
           {controls.error.message}
         </p>
       ) : null}

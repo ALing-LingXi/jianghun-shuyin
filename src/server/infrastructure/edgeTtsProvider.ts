@@ -16,7 +16,7 @@ export type EdgeTtsProviderOptions = {
 };
 
 export type EdgeTtsAudioGenerator = (
-  input: Required<Omit<SynthesizeSpeechInput, "fileName">>,
+  input: Required<Omit<SynthesizeSpeechInput, "fileName" | "timeoutMs">>,
 ) => Promise<unknown>;
 
 type UniversalEdgeTTSResult = {
@@ -54,7 +54,11 @@ export class EdgeTtsProvider implements TTSProvider {
       const synthesizeSpeech =
         this.options.synthesizeSpeech ?? synthesizeAudioBytes;
       audioBytes = await normalizeAudioBytes(
-        await synthesizeSpeech({ text, voice, rate, pitch }),
+        await withTimeout(
+          synthesizeSpeech({ text, voice, rate, pitch }),
+          input.timeoutMs,
+          "TTS attempt timed out",
+        ),
       );
     } catch (error) {
       const diagnostic = {
@@ -87,6 +91,48 @@ export class EdgeTtsProvider implements TTSProvider {
       rate,
       pitch,
     };
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  message: string,
+): Promise<T> {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return promise;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(new TtsAttemptTimeoutError(message));
+    }, timeoutMs);
+  });
+  promise.catch((error) => {
+    if (timedOut) {
+      console.warn("[tts] late synthesis failure after timeout", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Unknown TTS error",
+      });
+    }
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+class TtsAttemptTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TtsAttemptTimeoutError";
   }
 }
 

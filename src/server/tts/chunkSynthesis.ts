@@ -24,6 +24,7 @@ export type SynthesizePartChunksInput = {
   concurrency?: number;
   ttsLimiter?: Limiter;
   maxAttempts?: number;
+  attemptTimeoutMs?: number;
   retryDelaysMs?: readonly number[];
   shouldContinue?: () => Promise<boolean> | boolean;
   discardAudio?: (audioPath: string) => Promise<void> | void;
@@ -37,6 +38,7 @@ export type SynthesizePartChunksResult = {
 };
 
 const DEFAULT_MAX_TTS_ATTEMPTS = 5;
+const DEFAULT_TTS_ATTEMPT_TIMEOUT_MS = 45_000;
 export const DEFAULT_TTS_CHUNK_CONCURRENCY = 2;
 export const DEFAULT_GLOBAL_TTS_CONCURRENCY = 3;
 const RETRY_DELAYS_MS = [1_000, 3_000, 8_000, 15_000, 30_000] as const;
@@ -98,6 +100,8 @@ export async function synthesizePartChunks(
             rate: input.rate,
             pitch: input.pitch,
             fileName: `${input.partId}-${plannedChunk.index}.mp3`,
+            timeoutMs:
+              input.attemptTimeoutMs ?? DEFAULT_TTS_ATTEMPT_TIMEOUT_MS,
           },
           {
             partId: input.partId,
@@ -263,6 +267,7 @@ export function isRetryableTtsError(error: unknown): boolean {
     "socket",
     "timeout",
     "timed out",
+    "attempt timed out",
     "econnreset",
     "etimedout",
     "rate limit",
