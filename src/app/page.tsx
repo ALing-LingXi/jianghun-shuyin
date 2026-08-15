@@ -24,8 +24,8 @@ export default function HomePage() {
           <h1 className="demon-home-title">匠魂书音</h1>
 
           <p className="demon-home-lead">
-            把小说收进本地魂殿。阅读书架保存文字与封面，听书书架生成章节音频，
-            两套数据独立维护。
+            把小说收进本地魂库。阅读书架保存文字与封面，听书书架生成章节音频，
+            现在还多了一把文本清洗工具，给脏 TXT 先过一遍。
           </p>
 
           <div className="demon-home-gates">
@@ -60,7 +60,11 @@ export default function HomePage() {
             </StarBorder>
             <Link className="demon-button-secondary" href="/reading/upload">
               <Library aria-hidden="true" />
-              藏入阅读书架
+              只存阅读书架
+            </Link>
+            <Link className="demon-button-secondary" href="/tools/text-clean">
+              <Sparkles aria-hidden="true" />
+              清洗脏文本
             </Link>
           </div>
         </div>
