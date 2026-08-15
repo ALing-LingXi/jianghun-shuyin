@@ -4,6 +4,7 @@ import {
   createJobSchema,
   jobSchema,
   playerSchema,
+  textCleanUploadSchema,
   uploadFileSchema,
   uploadTextSchema,
   uploadSchema,
@@ -153,6 +154,29 @@ describe("shared schemas", () => {
         voice: "zh-CN-XiaoxiaoNeural",
         rate: "+0%",
         pitch: "+0Hz",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts text clean upload metadata and rejects invalid files", () => {
+    expect(
+      textCleanUploadSchema.parse({
+        fileName: "dirty.txt",
+        fileSize: 1024,
+      }),
+    ).toMatchObject({ fileName: "dirty.txt" });
+
+    expect(() =>
+      textCleanUploadSchema.parse({
+        fileName: "dirty.epub",
+        fileSize: 1024,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      textCleanUploadSchema.parse({
+        fileName: "too-large.txt",
+        fileSize: 20 * 1024 * 1024 + 1,
       }),
     ).toThrow();
   });

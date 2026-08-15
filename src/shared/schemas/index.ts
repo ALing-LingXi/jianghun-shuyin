@@ -5,3 +5,4 @@ export * from "./player";
 export * from "./reading";
 export * from "./tts";
 export * from "./upload";
+export * from "./text-clean";
